@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import random
 import threading
 from copy import deepcopy
 
@@ -44,7 +45,9 @@ class PatrolPeopleCollector(Node):
         ]
 
         # Output path
-        pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        scripts_dir = os.path.dirname(os.path.abspath(__file__))
+        package_dir = os.path.dirname(scripts_dir)
+        pkg_root = os.path.dirname(package_dir)
         default_output_file = os.path.join(pkg_root, 'data', 'detected_people.json')
         configured_output_file = self.get_parameter('markers_output_file').value
         self.output_file = configured_output_file if configured_output_file else default_output_file
@@ -79,6 +82,7 @@ class PatrolPeopleCollector(Node):
         self.saved_markers = []
         self.last_clusters = []
         self.last_face_goals = []
+        self._persist_markers()
 
         self.patrol_thread = threading.Thread(target=self._run_patrol, daemon=True)
         self.patrol_thread.start()
@@ -127,7 +131,6 @@ class PatrolPeopleCollector(Node):
                     #self.get_logger().warn(f'Patrol goal {i} failed with result: {result}')
                     pass
             # Cluster and create face goals
-            print("kmal bo un line")
             clusters = self._cluster_markers()
             self.last_clusters = clusters
             face_goals = self._build_face_goals_from_clusters(clusters)
@@ -145,7 +148,7 @@ class PatrolPeopleCollector(Node):
 
                 result = self.robot_commander.getResult()
                 if result == TaskResult.SUCCEEDED:
-                    print('hello')
+                    self.greet()
                     continue
 
                 #self.get_logger().warn(f'Primary face goal {i} failed, trying mirrored side...')
@@ -156,19 +159,29 @@ class PatrolPeopleCollector(Node):
 
                 result2 = self.robot_commander.getResult()
                 if result2 == TaskResult.SUCCEEDED:
-                    print('hello')
+                    self.greet()
                 else:
                     #self.get_logger().warn(f'Mirrored face goal {i} also failed: {result2}')
                     pass
 
-            self._persist_markers()
             #self.get_logger().info('Patrol + face interaction completed.')
 
         except Exception as e:
             #self.get_logger().error(f'Patrol failed with exception: {e}')
             pass
         finally:
+            try:
+                self._persist_markers()
+            except Exception:
+                pass
             self.patrol_running = False
+
+    def greet(self):
+        greetings = 'Hello human!, Nice face!, Nice to see you!, Hows it going?, What a nice day!, Hi there!, Greetings!, Salutations!, Hey!, Good to see you!'
+
+        greeting = random.choice(greetings.split(',')).strip()
+
+        self.get_logger().info(greeting)
 
     def _marker_callback(self, marker_msg: Marker):
         # Prefer Marker.points encoding: points[0]=face position, points[1]=face+normal
@@ -255,7 +268,6 @@ class PatrolPeopleCollector(Node):
             ny = float(m['normal']['y'])
             nz = float(m['normal']['z'])
             n = nx * nx + ny * ny + nz * nz
-            print(m['normal'])
             if n < 1e-6:
                 continue
             nx, ny, nz = nx / n, ny / n, nz / n
@@ -266,7 +278,6 @@ class PatrolPeopleCollector(Node):
                 if dot < 0.0:
                     nx, ny, nz = -nx, -ny, -nz
             vecs.append((nx, ny, nz))
-            print("kva se dogaja2")
             self.get_logger().info(f'Normal vector: ({nx:.2f}, {ny:.2f}, {nz:.2f})')
 
         if not vecs:
@@ -412,7 +423,7 @@ class PatrolPeopleCollector(Node):
         with open(self.output_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
 
-#        self.get_logger().info(f'Saved results to {self.output_file}')
+        self.get_logger().info(f'Saved results to {self.output_file}')
 
     def destroy_node(self):
         try:
