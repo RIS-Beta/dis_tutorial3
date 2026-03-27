@@ -12,7 +12,7 @@ from geometry_msgs.msg import PointStamped
 
 import tf2_geometry_msgs as tfg
 from tf2_ros import TransformException
-from tf2_ros.buffer import Buffer
+from tf2_ros.buffer import Buffer, Time
 from tf2_ros.transform_listener import TransformListener
 
 from cv_bridge import CvBridge, CvBridgeError
@@ -86,7 +86,7 @@ class detect_rings(Node):
                     self.get_logger().info(f"Ring detected (Hough): {x}, {y}")
                     cv2.circle(cv_image, (x, y), radius, (0, 255, 0), 2)
                     cv2.circle(cv_image, (x, y) , 5, (0, 0, 255), -1)
-                    self.rings.append((x, y))
+                    self.rings.append((x, y, radius))
            
             cv2.imshow("Ring detection Window", cv_image)
             cv2.waitKey(1)
@@ -103,30 +103,51 @@ class detect_rings(Node):
             a = pc2.read_points_numpy(data, field_names=("x", "y", "z"))
             a = a.reshape((data.height, data.width, 3))
 
-            for x, y in self.rings:
-                if x >= data.width or y >= data.height:
+            for x, y, radius in self.rings:
+                # Preveri meje slike
+                if x >= data.width or y >= data.height or x < 0 or y < 0:
                     continue
 
-                d = a[y, x, :]
-
+                edge_x = int(x + (radius * 0.8)) # 80% radija, da smo sigurno na materialu
+                edge_x = min(edge_x, data.width - 1)
+                
+                d = a[y, edge_x, :]
+                
+                # Če je desni rob NaN, poskusi še levo
                 if np.isnan(d[0]) or np.isinf(d[0]):
-                    continue
+                    edge_x_left = max(int(x - (radius * 0.8)), 0)
+                    d = a[y, edge_x_left, :]
+                    
+                    if np.isnan(d[0]) or np.isinf(d[0]):
+                        continue
 
-                # Točka v frame-u kamere
+                center_point = a[y, x, :]
+                center_z = center_point[2]
+                edge_z = d[2]
+
+                # Če center NI nan, preverimo razliko v globini
+                # Če je razlika med centrom in robom majhna (< 10cm), je to stena/nalepka
+                if not np.isnan(center_z) and not np.isinf(center_z):
+                    if abs(center_z - edge_z) < 0.1:
+                        # self.get_logger().info("Preskakovanje: Ni votel (verjetno nalepka).")
+                        continue
+
+                # 3. Priprava točke za transformacijo
                 point_in_cam_frame = PointStamped()
-                point_in_cam_frame.header.frame_id = data.header.frame_id
-                point_in_cam_frame.header.stamp = data.header.stamp      
+                point_in_cam_frame.header = data.header # Uporabi originalen header (frame + stamp)
                 point_in_cam_frame.point.x = float(d[0])
                 point_in_cam_frame.point.y = float(d[1])
                 point_in_cam_frame.point.z = float(d[2])
-                time_now = rclpy.time.Time()
 
                 timeout = Duration(seconds=0.2)
                 try:
-                    # Transformacija v MAP frame
-                    trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, time_now, timeout)
+                    trans = self.tf_buffer.lookup_transform(
+                        "map", 
+                        data.header.frame_id, 
+                        Time(),
+                        timeout
+                    )
                     point_in_map_frame = tfg.do_transform_point(point_in_cam_frame, trans)
-
                     # Ustvari marker v mapi
                     marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id, 0.0)
 
@@ -134,9 +155,10 @@ class detect_rings(Node):
                     self.marker_new_pub.publish(marker_in_map_frame)
                     self.new_marker_id += 1
                     
-                    # Originalen marker publisher (kot si imel v kodi)
                     self.marker_pub.publish(marker_in_map_frame)
                     self.markers.append(marker_in_map_frame)
+                    
+                    self.get_logger().info(f"Ring marker objavljen na: {point_in_map_frame.point.x:.2f}")
 
                 except TransformException as te:
                     self.get_logger().warn(f"Could not get transform: {te}")
@@ -156,9 +178,9 @@ class detect_rings(Node):
         marker.scale.y = scale
         marker.scale.z = scale
 
-        marker.color.r = 1.0
+        marker.color.r = 0.0
         marker.color.g = 0.0
-        marker.color.b = 0.0
+        marker.color.b = 1.0
         marker.color.a = 1.0
 
         marker.pose.position.x = point_stamped.point.x
