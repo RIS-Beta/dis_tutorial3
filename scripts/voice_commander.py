@@ -17,7 +17,6 @@ from dis_tutorial3.srv import Speech
 import soundfile as sf
 import os
 from kittentts import KittenTTS
-import simpleaudio as sa
 import numpy as np
 
 class VoiceCommander(Node):

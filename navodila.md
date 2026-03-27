@@ -45,6 +45,11 @@ Potrebujes .env z kitty:
 [text](https://github.com/KittenML/KittenTTS)
 in pa simpleaudio ter soundfile.
 
+```bash
+python3 -m venv kitten_env && source kitten_env/bin/activate
+pip install numpy soundfile simpleaudio kittentts
+```
+
 Moraš vžgati service da lahko posiljas na topic.
 ```bash
 ros2 run dis_tutorial3 voice_commander.py 
