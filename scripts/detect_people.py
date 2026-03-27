@@ -104,63 +104,63 @@ class detect_faces(Node):
 			
 		except CvBridgeError as e:
 			print(e)
-def pointcloud_callback(self, data):
-        if not self.rings:
-            return
+	def pointcloud_callback(self, data):
+			if not self.faces:
+				return
 
-        # get point cloud attributes
-        height = data.height
-        width = data.width
+			# get point cloud attributes
+			height = data.height
+			width = data.width
 
-        # 1. OPTIMIZACIJA: Preberi točke enkrat, ne v zanki (da ne "šteka")
-        a = pc2.read_points_numpy(data, field_names=("x", "y", "z"))
-        a = a.reshape((height, width, 3))
+			# 1. OPTIMIZACIJA: Preberi točke enkrat, ne v zanki (da ne "šteka")
+			a = pc2.read_points_numpy(data, field_names=("x", "y", "z"))
+			a = a.reshape((height, width, 3))
 
-        # iterate over ring coordinates
-        for x, y in self.rings:
-            
-            # Preveri meje (varnost)
-            if x >= width or y >= height:
-                continue
-
-            # read 3D coordinates from point cloud
-            d = a[y, x, :]
-
-            # Preveri, če je točka sploh veljavna (da ni NaN)
-            if np.isnan(d[0]) or np.isinf(d[0]):
-                continue
-
-            # Točka v frame-u kamere (v simulatorju je to običajno oakd_rgb_camera_optical_frame)
-            point_in_cam_frame = PointStamped()
-            point_in_cam_frame.header.frame_id = data.header.frame_id
-            point_in_cam_frame.header.stamp = data.header.stamp
-
-            point_in_cam_frame.point.x = float(d[0])
-            point_in_cam_frame.point.y = float(d[1])
-            point_in_cam_frame.point.z = float(d[2])
-
-            time_now = rclpy.time.Time() # Uporabi Time(0) ali Time() za najnovejšo transformacijo
-            timeout = Duration(seconds=0.1)
-
-            try:
-                # 2. KLJUČNI POPRAVEK: Transformacija iz frame-a podatkov (kamere) v MAPO
-                trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
-                
-                # Transformacija točke
-                point_in_map_frame = tfg.do_transform_point(point_in_cam_frame, trans)
-
-                # 3. Ustvari marker (ID se mora povečevati, da ne brišeš starih)
-                marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id)
-
-                # Publish
-                self.marker_new_pub.publish(marker_in_map_frame)
-                self.new_marker_id += 1
-                
-                self.get_logger().info(f"Marker objavljen na: {point_in_map_frame.point.x:.2f}, {point_in_map_frame.point.y:.2f}")
-
-            except TransformException as te:
-                self.get_logger().info(f"Cound not get the transform: {te}")
+			# iterate over face coordinates
+			for x, y in self.faces:
 				
+				# Preveri meje (varnost)
+				if x >= width or y >= height:
+					continue
+
+				# read 3D coordinates from point cloud
+				d = a[y, x, :]
+
+				# Preveri, če je točka sploh veljavna (da ni NaN)
+				if np.isnan(d[0]) or np.isinf(d[0]):
+					continue
+
+				# Točka v frame-u kamere (v simulatorju je to običajno oakd_rgb_camera_optical_frame)
+				point_in_cam_frame = PointStamped()
+				point_in_cam_frame.header.frame_id = data.header.frame_id
+				point_in_cam_frame.header.stamp = data.header.stamp
+
+				point_in_cam_frame.point.x = float(d[0])
+				point_in_cam_frame.point.y = float(d[1])
+				point_in_cam_frame.point.z = float(d[2])
+
+				time_now = rclpy.time.Time() # Uporabi Time(0) ali Time() za najnovejšo transformacijo
+				timeout = Duration(seconds=0.1)
+
+				try:
+					# 2. KLJUČNI POPRAVEK: Transformacija iz frame-a podatkov (kamere) v MAPO
+					trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
+					
+					# Transformacija točke
+					point_in_map_frame = tfg.do_transform_point(point_in_cam_frame, trans)
+
+					# 3. Ustvari marker (ID se mora povečevati, da ne brišeš starih)
+					marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id)
+
+					# Publish
+					self.marker_new_pub.publish(marker_in_map_frame)
+					self.new_marker_id += 1
+					
+					self.get_logger().info(f"Marker objavljen na: {point_in_map_frame.point.x:.2f}, {point_in_map_frame.point.y:.2f}")
+
+				except TransformException as te:
+					self.get_logger().info(f"Cound not get the transform: {te}")
+					
 
 	# def merge_clusters(self):
 	# 	centers = []
