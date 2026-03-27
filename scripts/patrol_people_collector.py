@@ -7,6 +7,7 @@ import random
 import threading
 from copy import deepcopy
 
+from build.dis_tutorial3.ament_cmake_python.dis_tutorial3.dis_tutorial3.srv._speech import Speech
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from rclpy.executors import MultiThreadedExecutor
@@ -27,6 +28,9 @@ class PatrolPeopleCollector(Node):
 
         self.cluster_radius_m = float(self.get_parameter('cluster_radius_m').value)
         self.face_goal_offset_m = float(self.get_parameter('face_goal_offset_m').value)
+
+        #connection to voice commander
+        self.voice_commender_publisher = self.create_publisher(Speech.Request, '/speech', 10)
 
         # From poz.txt
         self.predefined_positions = [
@@ -182,6 +186,8 @@ class PatrolPeopleCollector(Node):
         greeting = random.choice(greetings.split(',')).strip()
 
         self.get_logger().info(greeting)
+        self.voice_commender_publisher.publish(Speech.Request(text=greeting))
+
 
     def _marker_callback(self, marker_msg: Marker):
         # Prefer Marker.points encoding: points[0]=face position, points[1]=face+normal

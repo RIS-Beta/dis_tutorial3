@@ -147,6 +147,7 @@ class detect_rings(Node):
                         Time(),
                         timeout
                     )
+
                     point_in_map_frame = tfg.do_transform_point(point_in_cam_frame, trans)
                     # Ustvari marker v mapi
                     marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id, 0.0)
@@ -158,6 +159,11 @@ class detect_rings(Node):
                     self.marker_pub.publish(marker_in_map_frame)
                     self.markers.append(marker_in_map_frame)
                     
+
+                    #TODO: clusetering
+                    #TODO:color recognition
+
+
                     self.get_logger().info(f"Ring marker objavljen na: {point_in_map_frame.point.x:.2f}")
 
                 except TransformException as te:
