@@ -35,7 +35,7 @@ class detect_rings(Node):
         marker_topic = "/rings_marker"
         new_marker_topic = "/new_rings_marker"
 
-        self.detection_color = (0,0,255)
+        self.detection_color = (0,255,0)
         self.device = self.get_parameter('device').get_parameter_value().string_value
 
         self.bridge = CvBridge()
@@ -44,6 +44,7 @@ class detect_rings(Node):
         self.scan = None
         self.new_marker_id = 0
 
+        #thersholdings
         self.ration_thr = 1.5
         self.center_thr = 5.0 # Malo povečano za boljšo toleranco v simulatorju
 
@@ -62,10 +63,12 @@ class detect_rings(Node):
         self.rings = []
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            #color can not be detected gray image
+            rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
             blurred = cv2.GaussianBlur(gray, (9, 9), 2)
             
-            # Parametri za HoughCircles: omejitev velikosti (maxRadius)
+            #hugh cricles
             circles = cv2.HoughCircles(
                 blurred,
                 cv2.HOUGH_GRADIENT,
@@ -73,43 +76,19 @@ class detect_rings(Node):
                 minDist=50,
                 param1=100,
                 param2=35,     # Višja številka = bolj stroga detekcija
-                minRadius=10,
+                minRadius=4,
                 maxRadius=80,  # Omejitev, da ne prepozna prevelikih objektov
             )
 
             if circles is not None:
                 circles = np.round(circles[0, :]).astype(int)
                 for x, y, radius in circles:
-                    self.get_logger().info(f"Obroč zaznan (Hough): {x}, {y}")
+                    self.get_logger().info(f"Ring detected (Hough): {x}, {y}")
                     cv2.circle(cv_image, (x, y), radius, (0, 255, 0), 2)
                     cv2.circle(cv_image, (x, y) , 5, (0, 0, 255), -1)
                     self.rings.append((x, y))
-            else:
-                # Fallback na elipse, če Hough ne najde nič
-                thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, 30)
-                contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-                elps = []
-                for cnt in contours:
-                    if len(cnt) >= 20:
-                        ellipse = cv2.fitEllipse(cnt)
-                        (x, y), (MA, ma), angle = ellipse
-                        ration = MA / ma if ma > 0 else 0
-                        if 1.0 < ration <= self.ration_thr:
-                            elps.append(ellipse)
-
-                for i in range(len(elps)):
-                    for j in range(i + 1, len(elps)):
-                        e1 = elps[i]
-                        e2 = elps[j]
-                        dist = np.sqrt((e1[0][0] - e2[0][0])**2 + (e1[0][1] - e2[0][1])**2)
-                        if dist < self.center_thr:
-                            cx, cy = int(e1[0][0]), int(e1[0][1])
-                            self.get_logger().info(f"Obroč zaznan (Ellipse): {cx}, {cy}")
-                            cv2.ellipse(cv_image, e1, (0, 255, 0), 2)
-                            cv2.circle(cv_image, (cx, cy), 5, (0, 0, 255), -1)
-                            self.rings.append((cx, cy))
-
-            cv2.imshow("Detection Window", cv_image)
+           
+            cv2.imshow("Ring detection Window", cv_image)
             cv2.waitKey(1)
             
         except Exception as e:
