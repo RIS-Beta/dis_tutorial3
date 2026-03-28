@@ -8,7 +8,7 @@ from sensor_msgs.msg import Image, PointCloud2
 from sensor_msgs_py import point_cloud2 as pc2
 
 from visualization_msgs.msg import Marker
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import Point, PointStamped, Vector3Stamped
 
 import tf2_geometry_msgs as tfg
 from tf2_ros import TransformException
@@ -101,7 +101,7 @@ class detect_rings(Node):
 
 
             else:
-                # ni valid depth → pokaži črno
+                # invalid image, just show it as black
                 depth_norm = np.zeros_like(depth)
                 depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_JET)
 
@@ -116,13 +116,11 @@ class detect_rings(Node):
             return
 
         try:
-            # Preberemo numpy točke ENKRAT pred zanko (optimizacija)
             a = pc2.read_points_numpy(data, field_names=("x", "y", "z"))
             a = a.reshape((data.height, data.width, 3))
         
 
             for x, y, radius in self.rings:
-                # Preveri meje slike
                 if x >= data.width or y >= data.height or x < 0 or y < 0:
                     continue
                
@@ -136,7 +134,7 @@ class detect_rings(Node):
                 if valid_points.shape[0] == 0:
                     continue
 
-                # Povprečje vseh veljavnih točk → stabilen center markerja
+                # avrage the valid points to get a more stable position of the ring
                 center_point = np.mean(valid_points, axis=0)
 
                 self.get_logger().info(f"Center point: {center_point}")
@@ -144,13 +142,26 @@ class detect_rings(Node):
                 if center_point[2] < self.min_depth or center_point[2] > self.max_depth:
                     continue
 
+                #calulating normal vector of the ring plane
+                normal = [-float(center_point[0]), -float(center_point[1]), float(center_point[2])]
+                normal_length = np.linalg.norm(normal)
+                if normal_length == 0:
+                    continue
+                normal = normal / normal_length 
                 
-                # 3. Priprava točke za transformacijo
+                #creating point
                 point_in_robot_frame = PointStamped()
-                point_in_robot_frame.header = data.header # Uporabi originalen header (frame + stamp)
+                point_in_robot_frame.header = data.header # original header
                 point_in_robot_frame.point.x = float(center_point[0])
                 point_in_robot_frame.point.y = float(center_point[1])
                 point_in_robot_frame.point.z = float(center_point[2])
+
+
+                norm_vec = Vector3Stamped()
+                norm_vec.header = data.header
+                norm_vec.vector.x = float(normal[0])
+                norm_vec.vector.y = float(normal[1])
+                norm_vec.vector.z = float(normal[2])
 
                 time_now = rclpy.time.Time()
                 timeout = Duration(seconds=0.2)
@@ -158,11 +169,27 @@ class detect_rings(Node):
 
                     trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
                     point_in_map_frame = tfg.do_transform_point(point_in_robot_frame, trans)
-                    # Ustvari marker v mapi
+                    normal_in_map = self.tf_buffer.transform(norm_vec, "map")
+
+                    # creating marker on map
                     marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id, 0.0)
                     if marker_in_map_frame.pose.position.z > 3.0 or marker_in_map_frame.pose.position.z < 0.2:
                         self.get_logger().info("Marker preskočen (hardcoded filter)")
                         continue
+
+                    p0 = Point()
+                    p0.x = point_in_map_frame.point.x
+                    p0.y = point_in_map_frame.point.y
+                    p0.z = point_in_map_frame.point.z
+
+                    #0.5 long vector it is just for better represention in rviz
+                    p1 = Point()
+                    p1.x = normal_in_map.vector.x * 0.5 + p0.x
+                    p1.y = normal_in_map.vector.y * 0.5 + p0.y
+                    p1.z = normal_in_map.vector.z * 0.5 + p0.z
+
+                    marker_in_map_frame.points = [p0, p1]  # Set the points for the line marker
+                    marker_in_map_frame.type = Marker.SPHERE  # Change the marker type to ARROW
 
                     # Objavi marker
                     self.marker_pub.publish(marker_in_map_frame)

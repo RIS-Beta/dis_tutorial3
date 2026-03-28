@@ -94,7 +94,7 @@ class MissionControler(Node):
      
         #states of robot
         self.states = ["EXPLORE", "EVALUATE", "INTERACT"]
-        self.current_state = self.states[0]
+        self.current_state = self.states[0] 
 
         #subscription to markers of people and rings
         self.people_marker_sub = self.create_subscription(MarkerArray, "/people_marker", self.people_marker_callback, 10)
@@ -117,7 +117,18 @@ class MissionControler(Node):
         #array or clusters ready for interaction
         self.detected_objects = []
 
+        #targeted object for interaction
+        self.target_object = None
+
+        #counters for intractions for stopping condition
+        self.people_interaction_count = 0
+        self.rings_interaction_count = 0
+
         self.get_logger().info("Mission controler node setup complete, starting main loop")
+
+        #timer for changing states and doing main loop
+        #TODO: nto sure if it is really needed you can just automatically switch states after finishing the task in each state, but we will see
+        self.timer = self.create_timer(0.5, self.states_loop)
 
     def states_loop(self):
         if self.current_state == "EXPLORE":
@@ -129,12 +140,11 @@ class MissionControler(Node):
         elif self.current_state == "INTERACT":
             #interacting function
             self.state_interact()
+
         self.get_logger().info(f"Current state: {self.current_state}")
         
-        self.timer = self.create_timer(0.5, self.states_loop)
-
     #moving the robot to the given pose() 
-    def moveTo(self, pose):
+    def move_to(self, pose):
         self.robot_commander.goToPose(pose)
 
         #wait until the robot reaches the goal
@@ -180,7 +190,7 @@ class MissionControler(Node):
             pose.orientation.z = waypoint['orientation']['z']
             pose.orientation.w = waypoint['orientation']['w']
 
-            self.moveTo(pose)
+            self.move_to(pose)
 
             #rotating 360 degrees to look around
             self.rotate(pose)
@@ -188,18 +198,124 @@ class MissionControler(Node):
             self.get_logger().info(f"Finished exploring waypoint {self.current_waypoint_index}")
             self.current_waypoint_index += 1
             self.current_state = self.states[1] #switch to evaluate state after exploring each waypoint
+        else:
+            objects_for_interaction = [objects for objects in self.detected_objects if objects.status == "READY"] #ignoring those who are interacted
+
+            if not objects_for_interaction:
+                self.get_logger().info("Finished exploring all waypoints, no objects detected for interaction")
+                self.timer.cancel() #stop the timer to prevent switching to evaluate state
+                return
+            else:
+                self.get_logger().info("Finished exploring all waypoints, switching to evaluate state")
+                self.current_state = self.states[1] #switch to evaluate state after finishing exploring all waypoints
         return
 
+
+    def closest_point(self, objects_for_interaction):
+        closest_object = None
+        min_distance = float('inf')
+
+        #getting the current position of the robot
+        current_pose = self.robot_commander.current_pose
+        if current_pose is None:
+            self.get_logger().warn("Current robot pose is unknown, cannot evaluate closest object")
+            return None
+
+        #TODO: find a faster way to search for closest (but there arnet that many objects so it should be fine)
+        closest_object_index = -1
+        for i, obj in enumerate(objects_for_interaction):
+            distance = math.sqrt((current_pose.position.x - obj.center_position[1])**2 + (current_pose.position.y - obj.center_position[0])**2)
+            if distance < min_distance:
+                min_distance = distance
+                closest_object = obj
+                closest_object_index = i
+        self.get_logger().info(f"Closest object is {closest_object.type} with id {closest_object.id} at distance {min_distance:.2f} meters")
+        return closest_object
+
+    #evaluate the situation
     def state_evaluate(self):
-        #evaluate the situation
-        #if it's a person, switch to interact state
-        #if it's a ring, switch to explore state and navigate around it
+        #getting all detected objects
+        objects_for_interaction = [objects for objects in self.detected_objects if objects.status == "READY"] #ignoring those who are interacted
+        self.get_logger().info(f"Evaluating detected objects for interaction, found {len(objects_for_interaction)} objects ready for interaction")
+
+        if len(objects_for_interaction) == 0:
+            self.current_state = self.states[0] #switch to explore state if no objects are ready for interaction
+            self.get_logger().info(f"No objects ready for interaction, switching back to {{self.states[0]}} state")
+            return
+        
+        closest_object = self.closest_point(objects_for_interaction)
+        if closest_object is None:
+            self.current_state = self.states[0] #switch to explore state if we cannot find the closest object
+            self.get_logger().info(f"Could not determine closest object, switching back to {{self.states[0]}} state")
+            return
+        
+        self.target_object = closest_object
+        self.get_logger().info(f"Targeting object {self.target_object.type} with id {self.target_object.id} for interaction")
+        self.current_state = self.states[2] #switching state to interact after evaluating the situation
         return
+    
+    #interacting with the targeted object 
     def state_interact(self):
         #interact with the person (e.g. say something, ask for help, etc.)
         #after interaction, switch back to explore state
         #when array of intrest is empty switch back to explore state
         #if all person and rings detected stop 
+
+        #getting the pose
+        pose = Pose()
+
+        #TODO: perhaps we change this based on the type of object
+        distance_to_object = 0.5 #distcne of normal from the object
+
+        pose.position.x = self.target_object.center_position[1] + self.target_object.normal[0]*distance_to_object
+        pose.position.y = self.target_object.center_position[0] + self.target_object.normal[1]*distance_to_object
+        pose.position.z = self.target_object.center_position[2]
+
+        orientation = math.atan2(-self.target_object.normal[0], -self.target_object.normal[1])   
+        pose.orientation.x = 0.0
+        pose.orientation.y = 0.0
+        pose.orientation.z = math.sin(orientation/2)
+        pose.orientation.w = math.cos(orientation/2)
+
+        #moving to target object
+        self.move_to(pose)
+
+        self.get_logger().info(f"Interacting with object {self.target_object.type} with id {self.target_object.id}")
+        
+        #functionallity for interaction with the object
+        self.speech_future = None
+
+        self.people_interaction()
+
+        #TODO: add ring interaction
+        #uncomment when ring interaction is implemented
+        #if self.target_object.type == "people":
+        #    self.people_interaction(self.target_object)
+        #elif self.target_object.type == "ring":
+        #    self.ring_interaction(self.target_object)
+
+        while not self.speech_future.done():
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        self.detected_objects[self.detected_objects.index(self.target_object)].status = "INTERACTED" #marking the object as interacted
+        self.target_object = None
+        self.current_state = self.states[1] #switching back to evaluate
+        self.get_logger().info(f"Finished interaction, switching back to {self.states[1]} state")
+        return
+
+    def people_interaction(self):
+        greetings = 'Hello human!, Nice face!, Nice to see you!, Hows it going?, What a nice day!, Hi there!, Greetings!, Salutations!, Hey!, Good to see you!'
+
+        greeting = random.choice(greetings.split(',')).strip()
+        request = Speech.Request()
+        request.text = greeting
+
+        self.get_logger().info(greeting)
+        self.speech_future = self.voice_commander_client.call_async(request)
+        return
+
+    #TODO: implement ring interaction (e.g. say something about the ring, ask for help, etc.)
+    def ring_interaction(self, cluster):
         return
 
     def calculating_normal_vector(self, marker):

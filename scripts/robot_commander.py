@@ -22,7 +22,31 @@ from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Quaternion, PoseStamped, PoseWithCovarianceStamped
 from lifecycle_msgs.srv import GetState
 from nav2_msgs.action import Spin, NavigateToPose
-from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
+
+#feel free to uncommnent and not use this functtion i just didint want to download the bloody library for one function
+#from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
+def quaternion_from_euler(ai, aj, ak):
+    ai /= 2.0
+    aj /= 2.0
+    ak /= 2.0
+    ci = np.cos(ai)
+    si = np.sin(ai)
+    cj = np.cos(aj)
+    sj = np.sin(aj)
+    ck = np.cos(ak)
+    sk = np.sin(ak)
+    cc = ci*ck
+    cs = ci*sk
+    sc = si*ck
+    ss = si*sk
+
+    q = np.empty((4, ))
+    q[0] = cj*sc - sj*cs
+    q[1] = cj*ss + sj*cc
+    q[2] = cj*cs - sj*sc
+    q[3] = cj*cc + sj*ss
+
+    return q
 
 from irobot_create_msgs.action import Dock, Undock
 from irobot_create_msgs.msg import DockStatus
@@ -62,6 +86,9 @@ class RobotCommander(Node):
         self.status = None
         self.initial_pose_received = False
         self.is_docked = None
+
+        #newly added so i can get rc.current_pose in mission controler
+        self.current_pose = None
 
         # ROS2 subscribers
         self.create_subscription(DockStatus, 'dock_status', self._dockCallback, qos_profile_sensor_data)
