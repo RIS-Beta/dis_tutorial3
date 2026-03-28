@@ -70,7 +70,7 @@ class detect_rings(Node):
             depth = np.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0)
 
             #mask to ignore zero values (invalid depth)
-            mask = (depth > 0) & (depth < 3.0) # Ignoriraj globine večje od 3m (verjetno napake)
+            mask = (depth > 0) & (depth < self.max_depth) 
 
             #if depth image exists, we will normalize it for better visualization
             if np.any(mask):
@@ -127,7 +127,8 @@ class detect_rings(Node):
                     continue
                
                 mask = np.zeros((data.height, data.width), dtype=np.uint8)
-                cv2.circle(mask, (x, y), radius, 1, thickness=3)
+                cv2.circle(mask, (x, y), radius, 1, thickness=2)
+                cv2.circle(mask, (x, y), radius, 1, thickness=-2)
                 valid_points = a[mask==1]
                 valid_points = valid_points[~np.isnan(valid_points).any(axis=1)]
                 valid_points = valid_points[~np.isinf(valid_points).any(axis=1)]
