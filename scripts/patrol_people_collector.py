@@ -31,6 +31,7 @@ class PatrolPeopleCollector(Node):
 
         #connection to voice commander
         self.speech_client = self.create_client(Speech, 'speech')
+
         while not self.speech_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Servis "speech" ni na voljo, čakam...')
 
@@ -252,7 +253,6 @@ class PatrolPeopleCollector(Node):
 
         # enrich with averaged normal
         for i, c in enumerate(top3, start=1):
-            print("kva se dogaja")
             n = self._compute_cluster_normal(c['markers'])
             c['cluster_id'] = i
             c['size'] = len(c['markers'])

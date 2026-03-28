@@ -18,7 +18,8 @@ from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.duration import Duration
 from robot_commander import RobotCommander, TaskResult
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
+from rclpy.qos import qos_profile_sensor_data
 
 '''
 Cluster is a class that will be used to cluster people and rings for better interaction.
@@ -66,6 +67,9 @@ class MissionControler(Node):
         super().__init__('mission_controler')
         self.get_logger().info("Mission controler node initialized")
 
+        #for multithreading
+        self.is_busy = False
+
         #robot commander for giving goal poses to robot
         self.robot_commander = RobotCommander()
 
@@ -98,8 +102,8 @@ class MissionControler(Node):
         self.current_state = self.states[0] 
 
         #subscription to markers of people and rings
-        self.people_marker_sub = self.create_subscription(MarkerArray, "/people_marker", self.people_marker_callback, 10)
-        self.rings_marker_sub = self.create_subscription(MarkerArray, "/rings_marker", self.rings_marker_callback, 10)
+        self.people_marker_sub = self.create_subscription(Marker, "/new_people_marker", self.people_marker_callback, qos_profile_sensor_data)
+        self.rings_marker_sub = self.create_subscription(Marker, "/rings_marker", self.rings_marker_callback, qos_profile_sensor_data)
         
         #placeholder for markers
         self.people_markers = []
@@ -129,27 +133,48 @@ class MissionControler(Node):
 
         #timer for changing states and doing main loop
         #TODO: nto sure if it is really needed you can just automatically switch states after finishing the task in each state, but we will see
-        self.timer = self.create_timer(0.5, self.states_loop)
+        
+        # NEW: Removed self.timer to prevent "Executor is already spinning" error.
+        # We will call states_loop manually in the main while loop.
+    
+    # New: This method will run in a separate thread to handle the logic
+    def _run_state_machine(self):
+        # We wait for Nav2 to be ready before starting
+        self.robot_commander.waitUntilNav2Active()
+        while rclpy.ok():
+            self.states_loop()
+            time.sleep(0.1)
 
     def states_loop(self):
-        if self.current_state == "EXPLORE":
-            #exploring function
-            self.state_explore()
-        elif self.current_state == "EVALUATE":
-            #evaluating function
-            self.state_evaluate()
-        elif self.current_state == "INTERACT":
-            #interacting function
-            self.state_interact()
+        if self.is_busy:
+            return
+            
+        self.is_busy = True
+        try:
+            if self.current_state == "EXPLORE":
+                #exploring function
+                self.state_explore()
+            elif self.current_state == "EVALUATE":
+                #evaluating function
+                self.state_evaluate()
+            elif self.current_state == "INTERACT":
+                #interacting function
+                self.state_interact()
 
-        self.get_logger().info(f"Current state: {self.current_state}")
+            self.get_logger().info(f"Current state: {self.current_state}")
+        except Exception as e:
+            self.get_logger().error(f"Error in states_loop: {e}")
+        finally:
+            self.is_busy = False
         
     #moving the robot to the given pose() 
     def move_to(self, pose):
+        self.get_logger().info(f"Navigating to goal: {pose.pose.position.x} {pose.pose.position.y}...")
         self.robot_commander.goToPose(pose)
 
         #wait until the robot reaches the goal
-        while not self.robot_commander.isTaskComplete():
+        # FIX: Since we are in a separate thread, this while loop won't block the executor
+        while rclpy.ok() and not self.robot_commander.isTaskComplete():
             time.sleep(0.1)
         
         result = self.robot_commander.getResult()
@@ -160,14 +185,14 @@ class MissionControler(Node):
         else:            
             self.get_logger().warn("Robot failed to reach the goal")
 
-    def rotate(self, pose, angle = 2*math.pi):
+    def rotate(self, angle = 2*math.pi):
         # Implementation for rotating the robot
         self.get_logger().info(f"Rotating robot by {math.degrees(angle)} degrees")
         
         #spin() has time_allowence if we want to rotate for given time
         self.robot_commander.spin(angle)
 
-        while not self.robot_commander.isTaskComplete():
+        while rclpy.ok() and not self.robot_commander.isTaskComplete():
             time.sleep(0.1)
         
         result = self.robot_commander.getResult()
@@ -197,7 +222,7 @@ class MissionControler(Node):
             self.move_to(pose)
 
             #rotating 360 degrees to look around
-            self.rotate(pose)
+            self.rotate()
 
             self.get_logger().info(f"Finished exploring waypoint {self.current_waypoint_index}")
             self.current_waypoint_index += 1
@@ -207,9 +232,8 @@ class MissionControler(Node):
 
             if not objects_for_interaction:
                 self.get_logger().info("Finished exploring all waypoints, no objects detected for interaction")
-                self.timer.cancel() #stop the timer to prevent switching to evaluate state
-                rclpy.shutdown()
-                return
+                # NEW: Exit logic improved to stop the main loop
+                os._exit(0)
             else:
                 self.get_logger().info("Finished exploring all waypoints, switching to evaluate state")
                 self.current_state = self.states[1] #switch to evaluate state after finishing exploring all waypoints
@@ -221,20 +245,24 @@ class MissionControler(Node):
         min_distance = float('inf')
 
         #getting the current position of the robot
-        current_pose = self.robot_commander.current_pose.pose
-        if current_pose is None:
+        # NEW: Check if current_pose is available from robot_commander
+        try:
+            current_pose = self.robot_commander.current_pose.pose
+            curr_x = current_pose.position.x
+            curr_y = current_pose.position.y
+        except Exception:
             self.get_logger().warn("Current robot pose is unknown, cannot evaluate closest object")
-            return None
+            return objects_for_interaction[0] if objects_for_interaction else None
 
         #TODO: find a faster way to search for closest (but there arnet that many objects so it should be fine)
-        closest_object_index = -1
-        for i, obj in enumerate(objects_for_interaction):
-            distance = math.sqrt((current_pose.position.x - obj.center_position[1])**2 + (current_pose.position.y - obj.center_position[0])**2)
+        for obj in objects_for_interaction:
+            distance = math.sqrt((curr_x - obj.center_position[1])**2 + (curr_y - obj.center_position[0])**2)
             if distance < min_distance:
                 min_distance = distance
                 closest_object = obj
-                closest_object_index = i
-        self.get_logger().info(f"Closest object is {closest_object.type} with id {closest_object.id} at distance {min_distance:.2f} meters")
+        
+        if closest_object:
+            self.get_logger().info(f"Closest object is {closest_object.type} with id {closest_object.id} at distance {min_distance:.2f} meters")
         return closest_object
 
     #evaluate the situation
@@ -245,13 +273,13 @@ class MissionControler(Node):
 
         if len(objects_for_interaction) == 0:
             self.current_state = self.states[0] #switch to explore state if no objects are ready for interaction
-            self.get_logger().info(f"No objects ready for interaction, switching back to {{self.states[0]}} state")
+            self.get_logger().info(f"No objects ready for interaction, switching back to {self.states[0]} state")
             return
         
         closest_object = self.closest_point(objects_for_interaction)
         if closest_object is None:
             self.current_state = self.states[0] #switch to explore state if we cannot find the closest object
-            self.get_logger().info(f"Could not determine closest object, switching back to {{self.states[0]}} state")
+            self.get_logger().info(f"Could not determine closest object, switching back to {self.states[0]} state")
             return
         
         self.target_object = closest_object
@@ -272,15 +300,13 @@ class MissionControler(Node):
         pose.header.stamp = self.get_clock().now().to_msg()  # Set the timestamp
 
         #TODO: perhaps we change this based on the type of object
-        distance_to_object = 0.5 #distcne of normal from the object
+        distance_to_object = 0.6 #distcne of normal from the object
 
         pose.pose.position.x = self.target_object.center_position[1] + self.target_object.normal[0]*distance_to_object
         pose.pose.position.y = self.target_object.center_position[0] + self.target_object.normal[1]*distance_to_object
         pose.pose.position.z = self.target_object.center_position[2]
 
-        orientation = math.atan2(-self.target_object.normal[0], -self.target_object.normal[1])   
-        pose.pose.orientation.x = 0.0
-        pose.pose.orientation.y = 0.0
+        orientation = math.atan2(-self.target_object.normal[1], -self.target_object.normal[0])   
         pose.pose.orientation.z = math.sin(orientation/2)
         pose.pose.orientation.w = math.cos(orientation/2)
 
@@ -291,20 +317,19 @@ class MissionControler(Node):
         
         #functionallity for interaction with the object
         self.speech_future = None
-
         self.people_interaction()
 
         #TODO: add ring interaction
-        #uncomment when ring interaction is implemented
-        #if self.target_object.type == "people":
-        #    self.people_interaction(self.target_object)
-        #elif self.target_object.type == "ring":
-        #    self.ring_interaction(self.target_object)
+        
+        #Check if speech_future was actually created before waiting
+        if self.speech_future:
+            while rclpy.ok() and not self.speech_future.done():
+                time.sleep(0.1)
 
-        while not self.speech_future.done():
-            time.sleep(0.1)
-
-        self.detected_objects[self.detected_objects.index(self.target_object)].status = "INTERACTED" #marking the object as interacted
+        self.speech_future = None
+        
+        # Marking the object as interacted
+        self.target_object.status = "INTERACTED"
         self.target_object = None
         self.current_state = self.states[1] #switching back to evaluate
         self.get_logger().info(f"Finished interaction, switching back to {self.states[1]} state")
@@ -351,9 +376,11 @@ class MissionControler(Node):
                 if math.sqrt((position.x - cluster.center_position[1])**2 + (position.y - cluster.center_position[0])**2) < self.cluster_distance_thr:
                     cluster.update(marker, normal_vector)
                     closeToCluster = True
+                    self.get_logger().info(f"Updated cluster {cluster.id} for people with new marker, count of markers in cluster is now {cluster.count}")
                     if cluster.count >= self.cluster_thr_people and cluster.status == "NOT_INTERACTED":
-                        self.detected_objects.append(cluster)
-                        cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
+                        if cluster not in self.detected_objects:
+                            self.detected_objects.append(cluster)
+                            cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
                     break
 
             #we create new cluster if marker is not close to any existing cluster and add it to detected objects for interaction
@@ -361,6 +388,7 @@ class MissionControler(Node):
                 new_cluster = Cluster(type, [position.y, position.x, position.z], normal_vector)
                 self.people_cluster.append(new_cluster)
             pass
+
         elif type == "rings":
             #cluster rings markers and update rings_cluster
             position = marker.pose.position
@@ -374,8 +402,9 @@ class MissionControler(Node):
                     cluster.update(marker, normal_vector)
                     closeToCluster = True
                     if cluster.count >= self.cluster_thr_rings and cluster.status == "NOT_INTERACTED":
-                        self.detected_objects.append(cluster)
-                        cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
+                        if cluster not in self.detected_objects:
+                            self.detected_objects.append(cluster)
+                            cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
                     break
 
             if not closeToCluster:
@@ -386,19 +415,17 @@ class MissionControler(Node):
 
 
     def people_marker_callback(self, msg):
-        self.people_markers = msg.markers
-        self.get_logger().info(f"Received {len(self.people_markers)} people markers")
+        marker = msg
+        self.get_logger().info(f"Received people marker")
         #cluster people markers and update people_cluster
-        for marker in self.people_markers:
-            self.clustering(marker, "people")
+        self.clustering(marker, "people")
         return
 
     def rings_marker_callback(self, msg):
-        self.rings_markers = msg.markers
-        self.get_logger().info(f"Received {len(self.rings_markers)} rings markers")
+        marker = msg
+        self.get_logger().info(f"Received ring marker")
         #cluster rings markers and update rings_cluster
-        for marker in self.rings_markers:
-            self.clustering(marker, "rings")
+        self.clustering(marker, "rings")
         return
     
     def create_marker(self, point_stamped, marker_id, lifetime=30.0):
@@ -436,19 +463,22 @@ def main():
     rclpy.init(args=None)
     node = MissionControler()
 
-    #multihreding to avoid rclpy.spin() blocking the execution of the main loop in the node
+    # Create MultiThreadedExecutor to handle concurrent node actions
     executor = MultiThreadedExecutor()
     executor.add_node(node)
-    spin_thread = threading.Thread(target=executor.spin, daemon=True)
-    spin_thread.start()
+    executor.add_node(node.robot_commander) # Add both if RobotCommander is its own node
+
+    # Start the state machine logic in a dedicated background thread
+    thread = threading.Thread(target=node._run_state_machine, daemon=True)
+    thread.start()
 
     try:
-        while rclpy.ok():
-            time.sleep(0.1)  # Sleep to prevent busy waiting
+        executor.spin()
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
-    rclpy.shutdown()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

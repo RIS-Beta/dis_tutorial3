@@ -38,6 +38,7 @@ install(PROGRAMS
   scripts/patrol_people_collector.py
   scripts/detect_rings.py
   scripts/voice_commander.py
+  scripts/mission_controler.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
