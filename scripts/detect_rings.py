@@ -33,7 +33,6 @@ class detect_rings(Node):
         ])
 
         marker_topic = "/rings_marker"
-        new_marker_topic = "/new_rings_marker"
 
         self.detection_color = (0,255,0)
         self.device = self.get_parameter('device').get_parameter_value().string_value
@@ -44,55 +43,73 @@ class detect_rings(Node):
         self.scan = None
         self.new_marker_id = 0
 
+        self.min_depth = 0.2  # Minimalna globina (m)
+        self.max_depth = 3.0  # Maksimalna globina (m)
+
         #thersholdings
         self.ration_thr = 1.5
         self.center_thr = 5.0 # Malo povečano za boljšo toleranco v simulatorju
 
-        self.rgb_image_sub = self.create_subscription(Image, "/oakd/rgb/preview/image_raw", self.rgb_callback, qos_profile_sensor_data)
+        #self.rgb_image_sub = self.create_subscription(Image, "/oakd/rgb/preview/image_raw", self.rgb_callback, qos_profile_sensor_data)
+        self.depth_image_sub = self.create_subscription(Image, "/oakd/rgb/preview/depth", self.depth_callback, qos_profile_sensor_data)
         self.pointcloud_sub = self.create_subscription(PointCloud2, "/oakd/rgb/preview/depth/points", self.pointcloud_callback, qos_profile_sensor_data)
 
         self.marker_pub = self.create_publisher(Marker, marker_topic, qos_profile_sensor_data)
-        self.marker_new_pub = self.create_publisher(Marker, new_marker_topic, qos_profile_sensor_data)
 
         self.rings = []
         self.markers = []
 
         self.get_logger().info(f"Node has been initialized! Will publish ring markers to {marker_topic}.")
 
-    def rgb_callback(self, data):
-        self.rings = []
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-            #color can not be detected gray image
-            rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-            gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (9, 9), 2)
-            
-            #hugh cricles
-            circles = cv2.HoughCircles(
-                blurred,
-                cv2.HOUGH_GRADIENT,
-                dp=1.2,
-                minDist=50,
-                param1=100,
-                param2=35,     # Višja številka = bolj stroga detekcija
-                minRadius=4,
-                maxRadius=80,  # Omejitev, da ne prepozna prevelikih objektov
-            )
 
-            if circles is not None:
-                circles = np.round(circles[0, :]).astype(int)
-                for x, y, radius in circles:
-                    self.get_logger().info(f"Ring detected (Hough): {x}, {y}")
-                    cv2.circle(cv_image, (x, y), radius, (0, 255, 0), 2)
-                    cv2.circle(cv_image, (x, y) , 5, (0, 0, 255), -1)
-                    self.rings.append((x, y, radius))
-           
-            cv2.imshow("Ring detection Window", cv_image)
+    def depth_callback(self, data):
+        try:
+            depth = self.bridge.imgmsg_to_cv2(data, desired_encoding="passthrough")
+
+            #removing nan and inf values
+            depth = np.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0)
+
+            #mask to ignore zero values (invalid depth)
+            mask = (depth > 0) & (depth < 3.0) # Ignoriraj globine večje od 3m (verjetno napake)
+
+            #if depth image exists, we will normalize it for better visualization
+            if np.any(mask):
+                depth_norm = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX)
+                depth_uint8 = depth_norm.astype(np.uint8)
+                depth_uint8[~mask] = 0  # SEt invalid depth to black just in case
+                blurred_depth = cv2.GaussianBlur(depth_uint8, (9, 9), 2)
+                circles = cv2.HoughCircles(
+                    blurred_depth,
+                    cv2.HOUGH_GRADIENT,
+                    dp=1.2,
+                    minDist=50,
+                    param1=100,
+                    param2=35,     # accrurace of detection, higher = more strict
+                    minRadius=4,
+                    maxRadius=50,  # Limit to avoid detecting very large objects
+                )
+
+                depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_JET)
+
+                if circles is not None:
+                    circles = np.round(circles[0, :]).astype(int)
+                    for x, y, radius in circles:
+                        self.get_logger().info(f"Ring detected (Hough): {x}, {y}")
+                        cv2.circle(depth_color, (x, y), radius, (0, 255, 0), 2)
+                        cv2.circle(depth_color, (x, y) , 5, (0, 0, 255), -1)
+                        self.rings.append((x, y, radius))
+
+
+            else:
+                # ni valid depth → pokaži črno
+                depth_norm = np.zeros_like(depth)
+                depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_JET)
+
+            cv2.imshow("Depth", depth_color)    
             cv2.waitKey(1)
-            
+
         except Exception as e:
-            self.get_logger().error(f"Error processing image: {e}")
+            print(f"Depth callback error: {e}")
 
     def pointcloud_callback(self, data):
         if not self.rings:
@@ -102,75 +119,67 @@ class detect_rings(Node):
             # Preberemo numpy točke ENKRAT pred zanko (optimizacija)
             a = pc2.read_points_numpy(data, field_names=("x", "y", "z"))
             a = a.reshape((data.height, data.width, 3))
+        
 
             for x, y, radius in self.rings:
                 # Preveri meje slike
                 if x >= data.width or y >= data.height or x < 0 or y < 0:
                     continue
+               
+                mask = np.zeros((data.height, data.width), dtype=np.uint8)
+                cv2.circle(mask, (x, y), radius, 1, thickness=3)
+                valid_points = a[mask==1]
+                valid_points = valid_points[~np.isnan(valid_points).any(axis=1)]
+                valid_points = valid_points[~np.isinf(valid_points).any(axis=1)]
 
-                edge_x = int(x + (radius * 0.8)) # 80% radija, da smo sigurno na materialu
-                edge_x = min(edge_x, data.width - 1)
+                if valid_points.shape[0] == 0:
+                    continue
+
+                # Povprečje vseh veljavnih točk → stabilen center markerja
+                center_point = np.mean(valid_points, axis=0)
+
+                self.get_logger().info(f"Center point: {center_point}")
+
+                if center_point[2] < self.min_depth or center_point[2] > self.max_depth:
+                    continue
+
                 
-                d = a[y, edge_x, :]
-                
-                # Če je desni rob NaN, poskusi še levo
-                if np.isnan(d[0]) or np.isinf(d[0]):
-                    edge_x_left = max(int(x - (radius * 0.8)), 0)
-                    d = a[y, edge_x_left, :]
-                    
-                    if np.isnan(d[0]) or np.isinf(d[0]):
-                        continue
-
-                center_point = a[y, x, :]
-                center_z = center_point[2]
-                edge_z = d[2]
-
-                # Če center NI nan, preverimo razliko v globini
-                # Če je razlika med centrom in robom majhna (< 10cm), je to stena/nalepka
-                if not np.isnan(center_z) and not np.isinf(center_z):
-                    if abs(center_z - edge_z) < 0.1:
-                        # self.get_logger().info("Preskakovanje: Ni votel (verjetno nalepka).")
-                        continue
-
                 # 3. Priprava točke za transformacijo
-                point_in_cam_frame = PointStamped()
-                point_in_cam_frame.header = data.header # Uporabi originalen header (frame + stamp)
-                point_in_cam_frame.point.x = float(d[0])
-                point_in_cam_frame.point.y = float(d[1])
-                point_in_cam_frame.point.z = float(d[2])
+                point_in_robot_frame = PointStamped()
+                point_in_robot_frame.header = data.header # Uporabi originalen header (frame + stamp)
+                point_in_robot_frame.point.x = float(center_point[0])
+                point_in_robot_frame.point.y = float(center_point[1])
+                point_in_robot_frame.point.z = float(center_point[2])
 
+                time_now = rclpy.time.Time()
                 timeout = Duration(seconds=0.2)
                 try:
-                    trans = self.tf_buffer.lookup_transform(
-                        "map", 
-                        data.header.frame_id, 
-                        Time(),
-                        timeout
-                    )
 
-                    point_in_map_frame = tfg.do_transform_point(point_in_cam_frame, trans)
+                    trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
+                    point_in_map_frame = tfg.do_transform_point(point_in_robot_frame, trans)
                     # Ustvari marker v mapi
                     marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id, 0.0)
+                    if marker_in_map_frame.pose.position.z > 3.0 or marker_in_map_frame.pose.position.z < 0.2:
+                        self.get_logger().info("Marker preskočen (hardcoded filter)")
+                        continue
 
                     # Objavi marker
-                    self.marker_new_pub.publish(marker_in_map_frame)
+                    self.marker_pub.publish(marker_in_map_frame)
                     self.new_marker_id += 1
                     
-                    self.marker_pub.publish(marker_in_map_frame)
                     self.markers.append(marker_in_map_frame)
                     
 
-                    #TODO: clusetering
-                    #TODO:color recognition
-
-
-                    self.get_logger().info(f"Ring marker objavljen na: {point_in_map_frame.point.x:.2f}")
+                    self.get_logger().info(f"Ring marker objavljen na: {point_in_map_frame.point.x:.2f}, {point_in_map_frame.point.y:.2f}, {point_in_map_frame.point.z:.2f}")
 
                 except TransformException as te:
                     self.get_logger().warn(f"Could not get transform: {te}")
 
         except Exception as e:
             self.get_logger().error(f"Pointcloud error: {e}")
+
+        # Počisti detekcije po obdelavi
+        self.rings = []
 
     def create_marker(self, point_stamped, marker_id, lifetime=30.0):
         marker = Marker()
