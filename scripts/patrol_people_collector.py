@@ -7,7 +7,7 @@ import random
 import threading
 from copy import deepcopy
 
-from build.dis_tutorial3.ament_cmake_python.dis_tutorial3.dis_tutorial3.srv._speech import Speech
+from dis_tutorial3.srv import Speech
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from rclpy.executors import MultiThreadedExecutor
@@ -30,7 +30,9 @@ class PatrolPeopleCollector(Node):
         self.face_goal_offset_m = float(self.get_parameter('face_goal_offset_m').value)
 
         #connection to voice commander
-        self.voice_commender_publisher = self.create_publisher(Speech.Request, '/speech', 10)
+        self.speech_client = self.create_client(Speech, 'speech')
+        while not self.speech_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Servis "speech" ni na voljo, čakam...')
 
         # From poz.txt
         self.predefined_positions = [
@@ -184,9 +186,11 @@ class PatrolPeopleCollector(Node):
         greetings = 'Hello human!, Nice face!, Nice to see you!, Hows it going?, What a nice day!, Hi there!, Greetings!, Salutations!, Hey!, Good to see you!'
 
         greeting = random.choice(greetings.split(',')).strip()
+        request = Speech.Request()
+        request.text = greeting
 
         self.get_logger().info(greeting)
-        self.voice_commender_publisher.publish(Speech.Request(text=greeting))
+        self.speech_client.call_async(request)
 
 
     def _marker_callback(self, marker_msg: Marker):
