@@ -4,6 +4,7 @@ import json
 import math
 import os
 import random
+import time
 import numpy as np
 import threading
 from copy import deepcopy
@@ -16,8 +17,8 @@ from rclpy.node import Node
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.duration import Duration
-
 from robot_commander import RobotCommander, TaskResult
+from rclpy.executors import MultiThreadedExecutor
 
 '''
 Cluster is a class that will be used to cluster people and rings for better interaction.
@@ -66,7 +67,7 @@ class MissionControler(Node):
         self.get_logger().info("Mission controler node initialized")
 
         #robot commander for giving goal poses to robot
-        self.robot_commander = RobotCommander(self)
+        self.robot_commander = RobotCommander()
 
         #TODO: we will fix this so the node will jiust read some file or smth not imported
         #waypoints for navigation
@@ -88,8 +89,8 @@ class MissionControler(Node):
         self.current_waypoint_index = 0
         
         #thresholds
-        self.cluster_thr_people = 10 #number od markers in cluster for it to be valid
-        self.cluster_thr_rings = 5 #number od markers in cluster for it to be valid
+        self.cluster_thr_people = 5 #number od markers in cluster for it to be valid
+        self.cluster_thr_rings = 2 #number od markers in cluster for it to be valid
         self.cluster_distance_thr = 0.5 #distance in meters for markers to be in the same cluster
      
         #states of robot
@@ -149,12 +150,12 @@ class MissionControler(Node):
 
         #wait until the robot reaches the goal
         while not self.robot_commander.isTaskComplete():
-            rclpy.spin_once(self)
+            time.sleep(0.1)
         
-        result = self.robot_commander.getTaskResult()
+        result = self.robot_commander.getResult()
 
         #feedback about the result of navigation
-        if result == TaskResult.SUCCESS:
+        if result == TaskResult.SUCCEEDED:
             self.get_logger().info("Robot reached the goal successfully")
         else:            
             self.get_logger().warn("Robot failed to reach the goal")
@@ -167,10 +168,10 @@ class MissionControler(Node):
         self.robot_commander.spin(angle)
 
         while not self.robot_commander.isTaskComplete():
-            rclpy.spin_once(self, timeout_sec=0.1)
+            time.sleep(0.1)
         
-        result = self.robot_commander.getTaskResult()
-        if result == TaskResult.SUCCESS:
+        result = self.robot_commander.getResult()
+        if result == TaskResult.SUCCEEDED:
             self.get_logger().info("Robot rotated successfully")
         else:
             self.get_logger().warn("Robot failed to rotate")
@@ -181,14 +182,17 @@ class MissionControler(Node):
         #navigate to waypoints
         if self.current_waypoint_index < len(self.waypoints):
             waypoint = self.waypoints[self.current_waypoint_index]
-            pose = Pose()
-            pose.position.x = waypoint['position']['x']
-            pose.position.y = waypoint['position']['y']
-            pose.position.z = waypoint['position']['z']
-            pose.orientation.x = waypoint['orientation']['x']
-            pose.orientation.y = waypoint['orientation']['y']
-            pose.orientation.z = waypoint['orientation']['z']
-            pose.orientation.w = waypoint['orientation']['w']
+            pose = PoseStamped()
+            pose.header.frame_id = "map"  # Set the frame ID
+            pose.header.stamp = self.get_clock().now().to_msg()  # Set the timestamp
+
+            pose.pose.position.x = waypoint['position']['x']
+            pose.pose.position.y = waypoint['position']['y']
+            pose.pose.position.z = waypoint['position']['z']
+            pose.pose.orientation.x = waypoint['orientation']['x']
+            pose.pose.orientation.y = waypoint['orientation']['y']
+            pose.pose.orientation.z = waypoint['orientation']['z']
+            pose.pose.orientation.w = waypoint['orientation']['w']
 
             self.move_to(pose)
 
@@ -204,6 +208,7 @@ class MissionControler(Node):
             if not objects_for_interaction:
                 self.get_logger().info("Finished exploring all waypoints, no objects detected for interaction")
                 self.timer.cancel() #stop the timer to prevent switching to evaluate state
+                rclpy.shutdown()
                 return
             else:
                 self.get_logger().info("Finished exploring all waypoints, switching to evaluate state")
@@ -216,7 +221,7 @@ class MissionControler(Node):
         min_distance = float('inf')
 
         #getting the current position of the robot
-        current_pose = self.robot_commander.current_pose
+        current_pose = self.robot_commander.current_pose.pose
         if current_pose is None:
             self.get_logger().warn("Current robot pose is unknown, cannot evaluate closest object")
             return None
@@ -262,20 +267,22 @@ class MissionControler(Node):
         #if all person and rings detected stop 
 
         #getting the pose
-        pose = Pose()
+        pose = PoseStamped()
+        pose.header.frame_id = "map"  # Set the frame ID
+        pose.header.stamp = self.get_clock().now().to_msg()  # Set the timestamp
 
         #TODO: perhaps we change this based on the type of object
         distance_to_object = 0.5 #distcne of normal from the object
 
-        pose.position.x = self.target_object.center_position[1] + self.target_object.normal[0]*distance_to_object
-        pose.position.y = self.target_object.center_position[0] + self.target_object.normal[1]*distance_to_object
-        pose.position.z = self.target_object.center_position[2]
+        pose.pose.position.x = self.target_object.center_position[1] + self.target_object.normal[0]*distance_to_object
+        pose.pose.position.y = self.target_object.center_position[0] + self.target_object.normal[1]*distance_to_object
+        pose.pose.position.z = self.target_object.center_position[2]
 
         orientation = math.atan2(-self.target_object.normal[0], -self.target_object.normal[1])   
-        pose.orientation.x = 0.0
-        pose.orientation.y = 0.0
-        pose.orientation.z = math.sin(orientation/2)
-        pose.orientation.w = math.cos(orientation/2)
+        pose.pose.orientation.x = 0.0
+        pose.pose.orientation.y = 0.0
+        pose.pose.orientation.z = math.sin(orientation/2)
+        pose.pose.orientation.w = math.cos(orientation/2)
 
         #moving to target object
         self.move_to(pose)
@@ -295,7 +302,7 @@ class MissionControler(Node):
         #    self.ring_interaction(self.target_object)
 
         while not self.speech_future.done():
-            rclpy.spin_once(self, timeout_sec=0.1)
+            time.sleep(0.1)
 
         self.detected_objects[self.detected_objects.index(self.target_object)].status = "INTERACTED" #marking the object as interacted
         self.target_object = None
@@ -428,7 +435,18 @@ class MissionControler(Node):
 def main():
     rclpy.init(args=None)
     node = MissionControler()
-    rclpy.spin(node)
+
+    #multihreding to avoid rclpy.spin() blocking the execution of the main loop in the node
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    spin_thread = threading.Thread(target=executor.spin, daemon=True)
+    spin_thread.start()
+
+    try:
+        while rclpy.ok():
+            time.sleep(0.1)  # Sleep to prevent busy waiting
+    except KeyboardInterrupt:
+        pass
     node.destroy_node()
     rclpy.shutdown()
 
