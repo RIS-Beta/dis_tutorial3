@@ -19,8 +19,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.duration import Duration
 from robot_commander import RobotCommander, TaskResult
 from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
-from rclpy.qos import qos_profile_sensor_data
-
+from rclpy.qos import qos_profile_sensor_data, QoSReliabilityPolicy
 '''
 Cluster is a class that will be used to cluster people and rings for better interaction.
 '''
@@ -104,6 +103,9 @@ class MissionControler(Node):
         #subscription to markers of people and rings
         self.people_marker_sub = self.create_subscription(Marker, "/new_people_marker", self.people_marker_callback, qos_profile_sensor_data)
         self.rings_marker_sub = self.create_subscription(Marker, "/rings_marker", self.rings_marker_callback, qos_profile_sensor_data)
+
+        #publisher for map goals
+        self.marker_pub = self.create_publisher(Marker, "/map_goals_marker", QoSReliabilityPolicy.BEST_EFFORT) 
         
         #placeholder for markers
         self.people_markers = []
@@ -310,6 +312,10 @@ class MissionControler(Node):
         pose.pose.orientation.z = math.sin(orientation/2)
         pose.pose.orientation.w = math.cos(orientation/2)
 
+        clr = (0.0, 1.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
+        goal_marker = self.create_marker(PoseStamped(header=pose.header, pose=pose.pose), marker_id=self.target_object.id, lifetime=10.0, color=clr) 
+        self.marker_pub.publish(goal_marker)
+        
         #moving to target object
         self.move_to(pose)
 
@@ -428,7 +434,7 @@ class MissionControler(Node):
         self.clustering(marker, "rings")
         return
     
-    def create_marker(self, point_stamped, marker_id, lifetime=30.0):
+    def create_marker(self, point_stamped, marker_id, lifetime=30.0, color=(1.0, 0.0, 0.0, 1.0)):
         """You can see the description of the Marker message here: https://docs.ros2.org/galactic/api/visualization_msgs/msg/Marker.html"""
         marker = Marker()
 
@@ -445,10 +451,10 @@ class MissionControler(Node):
         marker.scale.z = scale
 
         # Set the color
-        marker.color.r = 1.0
-        marker.color.g = 0.0
-        marker.color.b = 0.0
-        marker.color.a = 1.0
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = color[3]
 
         # Set the pose of the marker
         marker.pose.position.x = point_stamped.point.x
