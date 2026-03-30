@@ -11,7 +11,7 @@ from copy import deepcopy
 
 from dis_tutorial3.srv import Speech
 import rclpy
-from geometry_msgs.msg import Pose, PoseArray, PoseStamped
+from geometry_msgs.msg import Pose, PoseArray, PoseStamped, Point
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from std_srvs.srv import Trigger
@@ -65,6 +65,7 @@ class MissionControler(Node):
     def __init__(self):
         super().__init__('mission_controler')
         self.get_logger().info("Mission controler node initialized")
+        self.get_logger().info("testing brach")
 
         #for multithreading
         self.is_busy = False
@@ -312,8 +313,9 @@ class MissionControler(Node):
         pose.pose.orientation.z = math.sin(orientation/2)
         pose.pose.orientation.w = math.cos(orientation/2)
 
-        clr = (0.0, 1.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
-        goal_marker = self.create_marker(PoseStamped(header=pose.header, pose=pose.pose), marker_id=self.target_object.id, lifetime=10.0, color=clr) 
+ 
+        color = (0.0, 1.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
+        goal_marker = self.create_marker(pose, marker_id=self.target_object.id, lifetime=10.0, color=color) 
         self.marker_pub.publish(goal_marker)
         
         #moving to target object
@@ -457,9 +459,9 @@ class MissionControler(Node):
         marker.color.a = color[3]
 
         # Set the pose of the marker
-        marker.pose.position.x = point_stamped.point.x
-        marker.pose.position.y = point_stamped.point.y
-        marker.pose.position.z = point_stamped.point.z
+        marker.pose.position.x = point_stamped.pose.position.x
+        marker.pose.position.y = point_stamped.pose.position.y
+        marker.pose.position.z = point_stamped.pose.position.z
 
         marker.lifetime = Duration(seconds=lifetime).to_msg()
 

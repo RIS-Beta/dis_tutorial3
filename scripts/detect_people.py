@@ -70,7 +70,7 @@ class detect_faces(Node):
 		try:
 			cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
 
-			self.get_logger().info(f"Running inference on image...")
+			#self.get_logger().info(f"Running inference on image...")
 
 			# run inference
 			res = self.model.predict(cv_image, imgsz=(256, 320), show=False, verbose=False, classes=[0], device=self.device)
@@ -162,12 +162,12 @@ class detect_faces(Node):
 			point_in_robot_frame.point.y = float(d[1])
 			point_in_robot_frame.point.z = float(d[2])
 			time_now = rclpy.time.Time()
-			timeout = Duration(seconds=0.1)
+			timeout = Duration(seconds=0.2)
 			print(data.header.frame_id)
 			try:
 				# An example of how you can get a transform from /base_link frame to the /map frame
 				# as it is at time_now, wait for timeout for it to become available
-				trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, time_now, timeout)
+				trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
 				self.get_logger().info(f"Looks like the transform is available.")
 
 				# If we detect a face, approximate the face normal as person->camera direction.
