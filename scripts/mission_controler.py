@@ -9,6 +9,7 @@ import numpy as np
 import threading
 from copy import deepcopy
 
+from typing import List, Optional
 from dis_tutorial3.srv import Speech
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
@@ -29,7 +30,7 @@ class Cluster:
     #global id counter for clusters
     id_counter = 0
 
-    def __init__(self, type, position, normal):
+    def __init__(self, type: str, position: List[float], normal: List[float]) -> None:
         self.id = self.id_counter
         Cluster.id_counter += 1
         self.type = type # "people" or "ring"
@@ -38,7 +39,7 @@ class Cluster:
         self.normal = normal # normal vector for calcluating the pose for robot postion to interact
         self.count = 1 #how many markers are in the cluster for better clustering
 
-    def update(self, new_marker, new_normal):
+    def update(self, new_marker: Marker, new_normal: List[float]) -> None:
         #getting new center
         self.center_position = [(self.center_position[0]*self.count + new_marker.pose.position.y)/(self.count+1),
                                 (self.center_position[1]*self.count + new_marker.pose.position.x)/(self.count+1),
@@ -63,7 +64,7 @@ The main loop will be in the states_loop function which will call the appropriat
 
 '''
 class MissionControler(Node):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__('mission_controler')
         self.get_logger().info("Mission controler node initialized")
 
@@ -138,14 +139,14 @@ class MissionControler(Node):
         # We will call states_loop manually in the main while loop.
     
     # New: This method will run in a separate thread to handle the logic
-    def _run_state_machine(self):
+    def _run_state_machine(self) -> None:
         # We wait for Nav2 to be ready before starting
         self.robot_commander.waitUntilNav2Active()
         while rclpy.ok():
             self.states_loop()
             time.sleep(0.1)
 
-    def states_loop(self):
+    def states_loop(self) -> None:
         if self.is_busy:
             return
             
@@ -168,7 +169,7 @@ class MissionControler(Node):
             self.is_busy = False
         
     #moving the robot to the given pose() 
-    def move_to(self, pose):
+    def move_to(self, pose: PoseStamped) -> None:
         self.get_logger().info(f"Navigating to goal: {pose.pose.position.x} {pose.pose.position.y}...")
         self.robot_commander.goToPose(pose)
 
@@ -185,7 +186,7 @@ class MissionControler(Node):
         else:            
             self.get_logger().warn("Robot failed to reach the goal")
 
-    def rotate(self, angle = 2*math.pi):
+    def rotate(self, angle: float = 2*math.pi) -> None:
         # Implementation for rotating the robot
         self.get_logger().info(f"Rotating robot by {math.degrees(angle)} degrees")
         
@@ -202,7 +203,7 @@ class MissionControler(Node):
             self.get_logger().warn("Robot failed to rotate")
 
     #robot moves to next waypoint and then checks for detected objects
-    def state_explore(self):
+    def state_explore(self) -> None:
         #TODO: fixe so 360 roation beacoems mroe optimal (just fix this brute force)
         #navigate to waypoints
         if self.current_waypoint_index < len(self.waypoints):
@@ -240,7 +241,7 @@ class MissionControler(Node):
         return
 
 
-    def closest_point(self, objects_for_interaction):
+    def closest_point(self, objects_for_interaction: List[Cluster]) -> Optional[Cluster]:
         closest_object = None
         min_distance = float('inf')
 
@@ -266,7 +267,7 @@ class MissionControler(Node):
         return closest_object
 
     #evaluate the situation
-    def state_evaluate(self):
+    def state_evaluate(self) -> None:
         #getting all detected objects
         objects_for_interaction = [objects for objects in self.detected_objects if objects.status == "READY"] #ignoring those who are interacted
         self.get_logger().info(f"Evaluating detected objects for interaction, found {len(objects_for_interaction)} objects ready for interaction")
@@ -288,7 +289,7 @@ class MissionControler(Node):
         return
     
     #interacting with the targeted object 
-    def state_interact(self):
+    def state_interact(self) -> None:
         #interact with the person (e.g. say something, ask for help, etc.)
         #after interaction, switch back to explore state
         #when array of intrest is empty switch back to explore state
@@ -335,7 +336,7 @@ class MissionControler(Node):
         self.get_logger().info(f"Finished interaction, switching back to {self.states[1]} state")
         return
 
-    def people_interaction(self):
+    def people_interaction(self) -> None:
         greetings = 'Hello human!, Nice face!, Nice to see you!, Hows it going?, What a nice day!, Hi there!, Greetings!, Salutations!, Hey!, Good to see you!'
 
         greeting = random.choice(greetings.split(',')).strip()
@@ -347,10 +348,10 @@ class MissionControler(Node):
         return
 
     #TODO: implement ring interaction (e.g. say something about the ring, ask for help, etc.)
-    def ring_interaction(self, cluster):
+    def ring_interaction(self, cluster: Cluster) -> None:
         return
 
-    def calculating_normal_vector(self, marker):
+    def calculating_normal_vector(self, marker: Marker) -> List[float]:
         if len(marker.points) >= 2:
             p0 = marker.points[0]
             p1 = marker.points[1]
@@ -362,7 +363,7 @@ class MissionControler(Node):
         else:
             return [0,0,0]
 
-    def clustering(self, marker, type):
+    def clustering(self, marker: Marker, type: str) -> None:
         if type == "people":
             #cluster people markers and update people_cluster
             position = marker.pose.position
@@ -414,21 +415,21 @@ class MissionControler(Node):
         return
 
 
-    def people_marker_callback(self, msg):
+    def people_marker_callback(self, msg: Marker) -> None:
         marker = msg
         self.get_logger().info(f"Received people marker")
         #cluster people markers and update people_cluster
         self.clustering(marker, "people")
         return
 
-    def rings_marker_callback(self, msg):
+    def rings_marker_callback(self, msg: Marker) -> None:
         marker = msg
         self.get_logger().info(f"Received ring marker")
         #cluster rings markers and update rings_cluster
         self.clustering(marker, "rings")
         return
     
-    def create_marker(self, point_stamped, marker_id, lifetime=30.0):
+    def create_marker(self, point_stamped: PoseStamped, marker_id: int, lifetime: float = 30.0) -> Marker:
         """You can see the description of the Marker message here: https://docs.ros2.org/galactic/api/visualization_msgs/msg/Marker.html"""
         marker = Marker()
 
@@ -459,7 +460,7 @@ class MissionControler(Node):
 
         return marker
     
-def main():
+def main() -> None:
     rclpy.init(args=None)
     node = MissionControler()
 
