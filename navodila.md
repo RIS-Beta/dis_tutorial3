@@ -25,19 +25,6 @@ source /opt/ultralytics/bin/activate
 ros2 run dis_tutorial3 detect_people.py
 ```
 
-## Zaženi `patrol_people_collector.py` skripto
-V terminalu 4:
-
-```bash
-ros2 run dis_tutorial3 patrol_people_collector.py
-```
-
-## Izvedi service call za zagon obhoda
-V terminalu 5:
-
-```bash
-ros2 service call /start_patrol std_srvs/srv/Trigger "{}"
-```
 
 ## Za voice command serivce
 
@@ -63,7 +50,6 @@ Drugace samo v nodih publisas na topic /speech z custom servicom ki ga imamo
 
 # Mission controler
 
-
 All of the following commands must run in seperate terminals
 ```bash
 ros2 run rmw_zenoh_cpp rmw_zenohd
@@ -85,3 +71,17 @@ Then we turn on the mission_controler.py with predefined points and hope it work
 ros2 run dis_tutorial3 mission_controler.py
 ```
 
+# W/ the launchfile
+
+Run the zenoh router:
+```bash
+pkill -9 -f ros && ros2 daemon stop
+ros2 run rmw_zenoh_cpp rmw_zenohd
+```
+
+Launch the simulation:
+```bash
+ros2 launch dis_tutorial3 mission.launch.py
+```
+
+Note: You have to manually set the 2D pose estimate, you have 10 seconds to do that.
