@@ -447,7 +447,7 @@ class MissionControler(Node):
         marker.id = marker_id
 
         # Set the scale of the marker
-        scale = 0.1
+        scale = 0.3
         marker.scale.x = scale
         marker.scale.y = scale
         marker.scale.z = scale
