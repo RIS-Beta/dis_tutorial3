@@ -93,10 +93,12 @@ class MissionControler(Node):
         self.current_waypoint_index = 0
         
         #thresholds
-        self.cluster_thr_people = 5 #number od markers in cluster for it to be valid
+        self.cluster_thr_people = 50 #number od markers in cluster for it to be valid
         self.cluster_thr_rings = 2 #number od markers in cluster for it to be valid
         self.cluster_distance_thr = 0.5 #distance in meters for markers to be in the same cluster
-     
+        self.distance_to_people = 0.6 #distance in meters for interacting with people
+        self.distance_to_rings = 1.0 #distance in meters for interacting with rings
+        
         #states of robot
         self.states = ["EXPLORE", "EVALUATE", "INTERACT"]
         self.current_state = self.states[0] 

@@ -39,6 +39,8 @@ install(PROGRAMS
   scripts/detect_rings.py
   scripts/voice_commander.py
   scripts/mission_controler.py
+  scripts/cluster_people.py
+  scripts/cluster_rings.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

@@ -167,7 +167,7 @@ class detect_faces(Node):
 			try:
 				# An example of how you can get a transform from /base_link frame to the /map frame
 				# as it is at time_now, wait for timeout for it to become available
-				trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
+				trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, time_now, timeout)
 				self.get_logger().info(f"Looks like the transform is available.")
 
 				# If we detect a face, approximate the face normal as person->camera direction.
