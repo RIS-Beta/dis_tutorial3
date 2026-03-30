@@ -134,6 +134,8 @@ class MissionControler(Node):
         self.people_interaction_count = 0
         self.rings_interaction_count = 0
 
+        self.get_logger().info("Printing all waypoints")
+        self.display_waypoints()
         self.get_logger().info("Mission controler node setup complete, starting main loop")
 
         #timer for changing states and doing main loop
@@ -207,6 +209,27 @@ class MissionControler(Node):
             self.get_logger().warn("Robot failed to rotate")
 
     #robot moves to next waypoint and then checks for detected objects
+
+    def display_waypoints(self):
+        ''''This function is for displaying the waypoints in rviz for visualization, it is not used in the main loop but can be called for debugging or visualization purposes.
+        '''
+        for index, waypoint in enumerate(self.waypoints):
+            pose = PoseStamped()
+            pose.header.frame_id = "map"  # Set the frame ID
+            pose.header.stamp = self.get_clock().now().to_msg()  # Set the timestamp
+
+            pose.pose.position.x = waypoint['position']['x']
+            pose.pose.position.y = waypoint['position']['y']
+            pose.pose.position.z = waypoint['position']['z']
+            pose.pose.orientation.x = waypoint['orientation']['x']
+            pose.pose.orientation.y = waypoint['orientation']['y']
+            pose.pose.orientation.z = waypoint['orientation']['z']
+            pose.pose.orientation.w = waypoint['orientation']['w']
+
+            goal_marker = self.create_marker(pose, marker_id=index + 20, lifetime=360.0, color=(0.0, 1.0, 0.0, 1.0)) 
+            self.marker_pub.publish(goal_marker)
+
+
     def state_explore(self):
         #TODO: fixe so 360 roation beacoems mroe optimal (just fix this brute force)
         #navigate to waypoints
@@ -223,9 +246,6 @@ class MissionControler(Node):
             pose.pose.orientation.y = waypoint['orientation']['y']
             pose.pose.orientation.z = waypoint['orientation']['z']
             pose.pose.orientation.w = waypoint['orientation']['w']
-
-            goal_marker = self.create_marker(pose, marker_id=self.current_waypoint_index+ 20, lifetime=60.0, color=(0.0, 1.0, 0.0, 1.0)) 
-            self.marker_pub.publish(goal_marker)
 
             self.move_to(pose)
 
