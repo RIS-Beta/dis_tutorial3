@@ -20,6 +20,9 @@ from rclpy.duration import Duration
 from robot_commander import RobotCommander, TaskResult
 from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.qos import qos_profile_sensor_data, QoSReliabilityPolicy
+from dis_tutorial3.msg import ClusterMsg, ClusterArray
+from dis_tutorial3.srv import PeopleCluster
+
 '''
 Cluster is a class that will be used to cluster people and rings for better interaction.
 '''
@@ -63,17 +66,20 @@ class cluster_people(Node):
         self.people_marker_sub = self.create_subscription(Marker, "/new_people_marker", self.people_marker_callback, qos_profile_sensor_data)
 
         #publisher for map goals
-        self.marker_pub = self.create_publisher(MarkerArray, "/people_clusters", QoSReliabilityPolicy.BEST_EFFORT) 
+        self.marker_pub = self.create_publisher(MarkerArray, "/people_clusters", QoSReliabilityPolicy.BEST_EFFORT)
+
+        #service for getting clusters of people for interaction
+        self.get_clusters_service = self.create_service(PeopleCluster, "/get_people_clusters", self.get_clusters_callback)
 
         self.people_cluster = []
         self.rings_cluster = []
 
         self.cluster_distance_thr = 0.5 #threshold for clustering markers into clusters
-        self.cluster_thr_people = 150 #threshold for number of markers in cluster to consider it as detected object for people
+        self.cluster_thr_people = 100 #threshold for number of markers in cluster to consider it as detected object for people
 
     def calculating_normal_vector(self, marker):
         if len(marker.points) >= 2:
-            p0 = marker.points[0]
+            p0 = marker.points[0]   
             p1 = marker.points[1]
             normal_vector = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]
 
@@ -174,6 +180,27 @@ class cluster_people(Node):
 
         return marker
 
+    def get_clusters_callback(self, request, response):
+        cluster_array_msg = ClusterArray()
+        for cluster in self.people_cluster:
+            if cluster.status == "READY": #we only want to return clusters that are ready for interaction
+                cluster_msg = ClusterMsg()
+                cluster_msg.id = cluster.id
+                cluster_msg.type = cluster.type
+                cluster_msg.center_position.x = cluster.center_position[1]
+                cluster_msg.center_position.y = cluster.center_position[0]
+                cluster_msg.center_position.z = cluster.center_position[2]
+                cluster_msg.normal.x = cluster.normal[0]
+                cluster_msg.normal.y = cluster.normal[1]
+                cluster_msg.normal.z = cluster.normal[2]
+                cluster_msg.status = cluster.status
+                cluster_msg.count = cluster.count
+                cluster_array_msg.clusters.append(cluster_msg)
+                cluster.status = "INTERACTED" #we set the status of cluster to interacted so it wont be returned again in next service call
+        
+        response.clusters = cluster_array_msg
+        self.get_logger().info(f"Responding to get_people_clusters service with {len(cluster_array_msg.clusters)} clusters")
+        return response
 
 def main():
 	print('Cluster creator node started')

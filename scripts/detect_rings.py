@@ -86,7 +86,7 @@ class detect_rings(Node):
                     param1=100,
                     param2=35,     # accrurace of detection, higher = more strict
                     minRadius=4,
-                    maxRadius=50,  # Limit to avoid detecting very large objects
+                    maxRadius=20,  # Limit to avoid detecting very large objects
                 )
 
                 depth_color = cv2.applyColorMap(depth_uint8, cv2.COLORMAP_JET)
@@ -164,7 +164,7 @@ class detect_rings(Node):
                 norm_vec.vector.z = float(normal[2])
 
                 time_now = rclpy.time.Time()
-                timeout = Duration(seconds=0.2)
+                timeout = Duration(seconds=0.1)
                 try:
 
                     trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, time_now, timeout)
@@ -173,7 +173,7 @@ class detect_rings(Node):
 
                     # creating marker on map
                     marker_in_map_frame = self.create_marker(point_in_map_frame, self.new_marker_id, 0.0)
-                    if marker_in_map_frame.pose.position.z > 3.0 or marker_in_map_frame.pose.position.z < 0.2:
+                    if marker_in_map_frame.pose.position.z > self.max_depth or marker_in_map_frame.pose.position.z < self.min_depth:
                         self.get_logger().info("Marker preskočen (hardcoded filter)")
                         continue
 

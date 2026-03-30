@@ -20,6 +20,10 @@ from rclpy.duration import Duration
 from robot_commander import RobotCommander, TaskResult
 from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.qos import qos_profile_sensor_data, QoSReliabilityPolicy
+from dis_tutorial3.msg import ClusterMsg, ClusterArray
+from dis_tutorial3.srv import RingCluster
+
+
 '''
 Cluster is a class that will be used to cluster people and rings for better interaction.
 '''
@@ -63,7 +67,10 @@ class cluster_rings(Node):
         self.rings_marker_sub = self.create_subscription(Marker, "/rings_marker", self.rings_marker_callback, qos_profile_sensor_data)
 
         #publisher for map goals
-        self.marker_pub = self.create_publisher(MarkerArray, "/test_rings", QoSReliabilityPolicy.BEST_EFFORT) 
+        self.marker_pub = self.create_publisher(MarkerArray, "/test_rings", QoSReliabilityPolicy.BEST_EFFORT)
+
+        #service for getting clusters of rings for interaction
+        self.get_clusters_service = self.create_service(RingCluster, "/get_rings_clusters", self.get_clusters_callback) 
 
         self.rings_cluster = []
 
@@ -167,6 +174,25 @@ class cluster_rings(Node):
 
         return marker
 
+    def get_clusters_callback(self, request, response):
+        #service callback for getting clusters of rings for interaction
+        self.get_logger().info(f"Received request for getting clusters of rings for interaction")
+        response.clusters = ClusterArray()
+        for cluster in self.rings_cluster:
+            if cluster.status == "READY":
+                cluster_msg = ClusterMsg()
+                cluster_msg.id = cluster.id
+                cluster_msg.type = cluster.type
+                cluster_msg.center_position.x = cluster.center_position[1]
+                cluster_msg.center_position.y = cluster.center_position[0]
+                cluster_msg.center_position.z = cluster.center_position[2]
+                cluster_msg.normal.x = cluster.normal[0]
+                cluster_msg.normal.y = cluster.normal[1]
+                cluster_msg.normal.z = cluster.normal[2]
+                response.clusters.clusters.append(cluster_msg)
+                cluster.status = "INTERACTED" #after sending cluster for interaction we set its status to interacted
+                self.get_logger().info(f"Cluster {cluster.id} of type {cluster.type} with center position {cluster.center_position} and normal {cluster.normal} is added to response")
+        return response
 
 def main():
 	print('Cluster creator node started')
