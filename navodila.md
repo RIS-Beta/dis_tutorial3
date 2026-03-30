@@ -25,20 +25,6 @@ source /opt/ultralytics/bin/activate
 ros2 run dis_tutorial3 detect_people.py
 ```
 
-## Zaženi `patrol_people_collector.py` skripto
-V terminalu 4:
-
-```bash
-ros2 run dis_tutorial3 patrol_people_collector.py
-```
-
-## Izvedi service call za zagon obhoda
-V terminalu 5:
-
-```bash
-ros2 service call /start_patrol std_srvs/srv/Trigger "{}"
-```
-
 ## Za voice command serivce
 
 Potrebujes .env z kitty:
