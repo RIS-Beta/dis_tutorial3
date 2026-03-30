@@ -136,6 +136,24 @@ def generate_launch_description():
         ],
     )
 
+    cluster_people = Node(
+        package='dis_tutorial3',
+        executable='cluster_people.py',
+        name='cluster_people',
+        output='screen',
+        emulate_tty=True,
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
+    cluster_rings = Node(
+        package='dis_tutorial3',
+        executable='cluster_rings.py',
+        name='cluster_rings',
+        output='screen',
+        emulate_tty=True,
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     voice_commander = ExecuteProcess(
         cmd=[
             'bash',
@@ -165,6 +183,8 @@ def generate_launch_description():
         actions=[
             detect_people,
             detect_rings,
+            cluster_people,
+            cluster_rings,
             voice_commander,
             mission_controller,
         ],
