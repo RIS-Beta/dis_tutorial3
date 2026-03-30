@@ -1,10 +1,11 @@
 
 from ament_index_python.packages import get_package_share_directory
+import math
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
-from launch.conditions import IfCondition
+from launch.actions import OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -34,9 +35,9 @@ ARGUMENTS = [
 	),
 	DeclareLaunchArgument(
 		'startup_delay',
-		default_value='8.0',
+		default_value='10.0',
 		description='Seconds to wait before launching mission nodes',
-	),
+	)
 ]
 
 for pose_element in ['x', 'y', 'z', 'yaw']:
@@ -47,6 +48,7 @@ for pose_element in ['x', 'y', 'z', 'yaw']:
             description=f'{pose_element} component of the robot pose',
         )
     )
+
 
 def generate_launch_description():    
     # Launch Files
@@ -134,38 +136,37 @@ def generate_launch_description():
         ],
     )
 
-    # voice_commander = ExecuteProcess(
-    #     cmd=[
-    #         'bash',
-    #         '-lc',
-    #         [
-    #             'source ',
-    #             str(kitten_activate),
-    #             ' && ros2 run dis_tutorial3 voice_commander.py '
-    #             '--ros-args -r __node:=voice_commander '
-    #             '-p use_sim_time:=',
-    #             use_sim_time,
-    #         ],
-    #     ],
-    #     output='screen',
-    # )
+    voice_commander = ExecuteProcess(
+        cmd=[
+            'bash',
+            '-lc',
+            [
+                'source /home/beta/kitten_env/bin/activate',
+                ' && ros2 run dis_tutorial3 voice_commander.py '
+                '--ros-args -r __node:=voice_commander '
+                '-p use_sim_time:=',
+                use_sim_time,
+            ],
+        ],
+        output='screen',
+    )
 
-    # mission_controller = Node(
-    #     package='dis_tutorial3',
-    #     executable='mission_controler.py',
-    #     name='mission_controler',
-    #     output='screen',
-    #     emulate_tty=True,
-    #     parameters=[{'use_sim_time': use_sim_time}],
-    # )
+    mission_controller = Node(
+        package='dis_tutorial3',
+        executable='mission_controler.py',
+        name='mission_controler',
+        output='screen',
+        emulate_tty=True,
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
 
     mission_nodes = TimerAction(
         period=startup_delay,
         actions=[
             detect_people,
             detect_rings,
-            #voice_commander,
-            #mission_controller,
+            voice_commander,
+            mission_controller,
         ],
     )
 
@@ -174,6 +175,5 @@ def generate_launch_description():
     ld.add_action(robot_spawn)
     ld.add_action(localization)
     ld.add_action(nav2)
-    #ld.add_action(OpaqueFunction(function=_publish_initial_pose))
     ld.add_action(mission_nodes)
     return ld
