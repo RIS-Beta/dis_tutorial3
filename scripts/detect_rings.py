@@ -167,7 +167,7 @@ class detect_rings(Node):
                 timeout = Duration(seconds=0.2)
                 try:
 
-                    trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, data.header.stamp, timeout)
+                    trans = self.tf_buffer.lookup_transform("map", data.header.frame_id, time_now, timeout)
                     point_in_map_frame = tfg.do_transform_point(point_in_robot_frame, trans)
                     normal_in_map = self.tf_buffer.transform(norm_vec, "map")
 
