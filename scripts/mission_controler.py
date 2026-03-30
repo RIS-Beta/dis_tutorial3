@@ -224,6 +224,9 @@ class MissionControler(Node):
             pose.pose.orientation.z = waypoint['orientation']['z']
             pose.pose.orientation.w = waypoint['orientation']['w']
 
+            goal_marker = self.create_marker(pose, marker_id=self.current_waypoint_index+ 20, lifetime=60.0, color=(0.0, 1.0, 0.0, 1.0)) 
+            self.marker_pub.publish(goal_marker)
+
             self.move_to(pose)
 
             #rotating 360 degrees to look around
@@ -316,8 +319,8 @@ class MissionControler(Node):
         pose.pose.orientation.w = math.cos(orientation/2)
 
  
-        color = (0.0, 1.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
-        goal_marker = self.create_marker(pose, marker_id=self.target_object.id, lifetime=10.0, color=color) 
+        color = (1.0, 0.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
+        goal_marker = self.create_marker(pose, marker_id=self.target_object.id, lifetime=60.0, color=color) 
         self.marker_pub.publish(goal_marker)
         
         #moving to target object
@@ -449,7 +452,7 @@ class MissionControler(Node):
         marker.id = marker_id
 
         # Set the scale of the marker
-        scale = 0.3
+        scale = 0.2
         marker.scale.x = scale
         marker.scale.y = scale
         marker.scale.z = scale
