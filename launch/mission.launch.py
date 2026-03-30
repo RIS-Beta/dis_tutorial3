@@ -35,7 +35,7 @@ ARGUMENTS = [
 	),
 	DeclareLaunchArgument(
 		'startup_delay',
-		default_value='10.0',
+		default_value='15.0',
 		description='Seconds to wait before launching mission nodes',
 	)
 ]
