@@ -71,3 +71,17 @@ Then we turn on the mission_controler.py with predefined points and hope it work
 ros2 run dis_tutorial3 mission_controler.py
 ```
 
+# W/ the launchfile
+
+Run the zenoh router:
+```bash
+pkill -9 -f ros && ros2 daemon stop
+ros2 run rmw_zenoh_cpp rmw_zenohd
+```
+
+Launch the simulation:
+```bash
+ros2 launch dis_tutorial3 mission.launch.py
+```
+
+Note: You have to manually set the 2D pose estimate, you have 10 seconds to do that.
