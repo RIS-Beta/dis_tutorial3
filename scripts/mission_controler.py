@@ -178,6 +178,10 @@ class MissionControler(Node):
         #voice commander future
         self.speech_future = None
 
+        #waypoints display for visualization
+        self.get_logger().info("Printing all waypoints")
+        self.display_waypoints()
+
         self.get_logger().info("Mission controler node setup complete, starting main loop")
 
         #timer for changing states and doing main loop
@@ -264,6 +268,27 @@ class MissionControler(Node):
         #     self.get_logger().warn("Robot failed to rotate")
 
     #robot moves to next waypoint and then checks for detected objects
+
+    def display_waypoints(self):
+        ''''This function is for displaying the waypoints in rviz for visualization, it is not used in the main loop but can be called for debugging or visualization purposes.
+        '''
+        for index, waypoint in enumerate(self.waypoints):
+            pose = PoseStamped()
+            pose.header.frame_id = "map"  # Set the frame ID
+            pose.header.stamp = self.get_clock().now().to_msg()  # Set the timestamp
+
+            pose.pose.position.x = waypoint['position']['x']
+            pose.pose.position.y = waypoint['position']['y']
+            pose.pose.position.z = waypoint['position']['z']
+            pose.pose.orientation.x = waypoint['orientation']['x']
+            pose.pose.orientation.y = waypoint['orientation']['y']
+            pose.pose.orientation.z = waypoint['orientation']['z']
+            pose.pose.orientation.w = waypoint['orientation']['w']
+
+            goal_marker = self.create_marker(pose, marker_id=index + 20, lifetime=360.0, color=(0.0, 1.0, 0.0, 1.0)) 
+            self.marker_pub.publish(goal_marker)
+
+
     def state_explore(self):
         #TODO: fixe so 360 roation beacoems mroe optimal (just fix this brute force)
         #navigate to waypoints
@@ -390,15 +415,15 @@ class MissionControler(Node):
             pose.pose.orientation.w = math.cos(orientation/2)
 
             #postion goal target position for interaction
-            color = (0.0, 1.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
-            goal_marker = self.create_marker(pose, marker_id=self.target_object.id, lifetime=10.0, color=color) 
+            color = (1.0, 0.0, 0.0, 1.0) if self.target_object.type == "people" else (1.0, 1.0, 0.0, 1.0)
+            goal_marker = self.create_marker(pose, marker_id=self.target_object.id, lifetime=60.0, color=color) 
             self.marker_pub.publish(goal_marker)
             
             #moving to target object
             self.move_to(pose)
             self.interaction_started = True
             return
-
+ 
         if self.interaction_started and not self.robot_active:
             if self.speech_future is None:
                 #functionallity for interaction with the object
@@ -522,7 +547,7 @@ class MissionControler(Node):
         marker.id = marker_id
 
         # Set the scale of the marker
-        scale = 0.3
+        scale = 0.2
         marker.scale.x = scale
         marker.scale.y = scale
         marker.scale.z = scale

@@ -56,8 +56,6 @@ class Cluster:
         
         self.count += 1
 
-# obstaja možnost da tole ne dela zaradi 2 callback funkcij, mozn rabimo vec threadou
-
 class cluster_people(Node):
     def __init__(self):
         super().__init__('cluster_people')
@@ -136,6 +134,7 @@ class cluster_people(Node):
 
         markerText = self.create_marker(point_stamped, cluster.id, lifetime=0.0, color=(0.0, 0.0, 0.0, 1.0), scale=0.3)
         marker = self.create_marker(point_stamped, cluster.id, lifetime=0.0, color=(1.0, 0.0, 0.0, 0.5), scale=0.7)
+        normal_marker = self.create_normal_arrow_marker(point_stamped, cluster.id + 2000, cluster.normal, arrow_length=0.8, color=(1.0, 0.0, 0.0, 0.9))
         markerText.type = Marker.TEXT_VIEW_FACING
         markerText.id = cluster.id + 1000 
 
@@ -143,7 +142,8 @@ class cluster_people(Node):
 
         markerArray = MarkerArray()
         markerArray.markers.append(marker)
-        markerArray.markers.append(markerText)  
+        markerArray.markers.append(markerText)
+        markerArray.markers.append(normal_marker)
         
         self.marker_pub.publish(markerArray)
         self.get_logger().info(f"Published marker for cluster {cluster.id} of type {cluster.type} with text {marker.text} to /map_goals_marker topic for visualization in rviz")
@@ -180,6 +180,7 @@ class cluster_people(Node):
 
         return marker
 
+<<<<<<< HEAD
     def get_clusters_callback(self, request, response):
         cluster_array_msg = ClusterArray()
         for cluster in self.people_cluster:
@@ -201,6 +202,40 @@ class cluster_people(Node):
         response.clusters = cluster_array_msg
         self.get_logger().info(f"Responding to get_people_clusters service with {len(cluster_array_msg.clusters)} clusters")
         return response
+=======
+    def create_normal_arrow_marker(self, point_stamped, marker_id, normal_vector, arrow_length=0.8, lifetime=0.0, color=(0.0, 0.0, 1.0, 1.0)):
+        marker = Marker()
+        marker.header = point_stamped.header
+        marker.ns = "cluster_normals"
+        marker.id = marker_id
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+
+        start = Point()
+        start.x = point_stamped.point.x
+        start.y = point_stamped.point.y
+        start.z = point_stamped.point.z
+
+        end = Point()
+        end.x = start.x + normal_vector[0] * arrow_length
+        end.y = start.y + normal_vector[1] * arrow_length
+        end.z = start.z + normal_vector[2] * arrow_length
+
+        marker.points = [start, end]
+
+        marker.scale.x = 0.06
+        marker.scale.y = 0.12
+        marker.scale.z = 0.12
+
+        marker.color.r = color[0]
+        marker.color.g = color[1]
+        marker.color.b = color[2]
+        marker.color.a = color[3]
+
+        marker.lifetime = Duration(seconds=lifetime).to_msg()
+        return marker
+
+>>>>>>> 92737113e7af3d5eec460209d7e322dc73d5d4c0
 
 def main():
 	print('Cluster creator node started')
