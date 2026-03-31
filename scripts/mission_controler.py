@@ -78,12 +78,10 @@ class MissionControler(Node):
         self.get_logger().info("Mission controler node initialized")
         self.get_logger().info("testing brach")
 
-        #robot commander for giving goal poses to robot
-        #self.robot_commander = RobotCommander()
-
-        #subsscribers for moving robot and rotating
+        #publisher for moving robot and rotating
         self.move_to_pub = self.create_publisher(PoseStamped, '/move_to_pose', 10)
         self.rotate_pub = self.create_publisher(Float64, '/rotate', 10)
+        #subscriber for robot status to know when the robot is not active (moving or rotating)
         self.robot_status_sub = self.create_subscription(String, '/robot_status', self.robot_status_callback, 10)
 
         #TODO: we will fix this so the node will jiust read some file or smth not imported
@@ -108,20 +106,9 @@ class MissionControler(Node):
         #current pose of the robot
         self.current_pose = None
         
-        #thresholds
-        self.cluster_thr_people = 50 #number od markers in cluster for it to be valid
-        self.cluster_thr_rings = 2 #number od markers in cluster for it to be valid
-        self.cluster_distance_thr = 0.5 #distance in meters for markers to be in the same cluster
-        self.distance_to_people = 0.6 #distance in meters for interacting with people
-        self.distance_to_rings = 1.0 #distance in meters for interacting with rings
-        
         #states of robot
         self.states = ["EXPLORE", "SCAN", "EVALUATE", "INTERACT"]
         self.current_state = self.states[0] 
-
-        #subscription to markers of people and rings
-        # self.people_marker_sub = self.create_subscription(Marker, "/new_people_marker", self.people_marker_callback, qos_profile_sensor_data)
-        # self.rings_marker_sub = self.create_subscription(Marker, "/rings_marker", self.rings_marker_callback, qos_profile_sensor_data)
 
         #clinets for getting clusters of people and rings for interaction
         self.get_people_clusters_service = self.create_client(PeopleCluster, "/get_people_clusters")
@@ -150,11 +137,7 @@ class MissionControler(Node):
         while not self.voice_commander_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for speech service to be available...')
         
-        #clusters of people and rings for better interaction
-        #cluster have also states interected not intercated
-        self.people_cluster = []
-        self.rings_cluster = []
-
+    
         #array or clusters ready for interaction
         self.detected_objects = []
 
@@ -167,7 +150,7 @@ class MissionControler(Node):
 
         #distances to objects
         self.distance_to_people = 0.6
-        self.distance_to_rings = 1.0
+        self.distance_to_rings = 1.5
 
         #flag interaction
         self.interaction_started = False
@@ -184,23 +167,20 @@ class MissionControler(Node):
 
         self.get_logger().info("Mission controler node setup complete, starting main loop")
 
-        #timer for changing states and doing main loop
-        #TODO: nto sure if it is really needed you can just automatically switch states after finishing the task in each state, but we will see
         
-        # NEW: Removed self.timer to prevent "Executor is already spinning" error.
-        # We will call states_loop manually in the main while loop.
     
+    #checking if the robot is not active (moving or rotating) before doing any action in the main loop
     def robot_status_callback(self, msg):
         self.get_logger().info(f"Received robot status: {msg.data}")
         if msg.data == "FINISHED":
             self.robot_active = False
             
-
+    #callback for getting the current pose of the robot from amcl pose topic
     def pose_callback(self, msg):
         self.current_pose = msg
         return
 
-    # New: This method will run in a separate thread to handle the logic
+    #This method will run in a separate thread to handle the logic
     def _run_state_machine(self):
         # We wait for Nav2 to be ready before starting
         self.robot_commander.waitUntilNav2Active()
@@ -208,6 +188,7 @@ class MissionControler(Node):
             self.states_loop()
             time.sleep(0.1)
 
+    #state loop will handle the logic for each state
     def states_loop(self):
         try:
             if self.current_state == "EXPLORE":
@@ -229,45 +210,22 @@ class MissionControler(Node):
     
 
 
-    #moving the robot to the given pose() 
+    #moving the robot to the given pose() by publishing on topic for robot commander to react to
     def move_to(self, pose):
         self.get_logger().info(f"Navigating to goal: {pose.pose.position.x} {pose.pose.position.y}...")
+        #setting the robot active flag to avoid other actions while moving, it will be turned off by the robot commander after reaching the goal
         self.robot_active = True
         self.move_to_pub.publish(pose)
-        #self.robot_commander.goToPose(pose)
+      
 
-        # #wait until the robot reaches the goal
-        # # FIX: Since we are in a separate thread, this while loop won't block the executor
-        # while rclpy.ok() and not self.robot_commander.isTaskComplete():
-        #     time.sleep(0.1)
-        
-        # result = self.robot_commander.getResult()
-
-        # #feedback about the result of navigation
-        # if result == TaskResult.SUCCEEDED:
-        #     self.get_logger().info("Robot reached the goal successfully")
-        # else:            
-        #     self.get_logger().warn("Robot failed to reach the goal")
-
+    #publish on topic to rotate the robot by the given angle (in radians)
     def rotate(self, angle = 2*math.pi):
         # Implementation for rotating the robot
         self.get_logger().info(f"Rotating robot by {math.degrees(angle)} degrees")
+        #turn on the robot active flag to avoid other actions while rotating, it will be turned off by the robot commander after finishing the rotation
         self.robot_active = True
         self.rotate_pub.publish(Float64(data=angle))
         
-        # #spin() has time_allowence if we want to rotate for given time
-        # self.robot_commander.spin(angle)
-
-        # while rclpy.ok() and not self.robot_commander.isTaskComplete():
-        #     time.sleep(0.1)
-        
-        # result = self.robot_commander.getResult()
-        # if result == TaskResult.SUCCEEDED:
-        #     self.get_logger().info("Robot rotated successfully")
-        # else:
-        #     self.get_logger().warn("Robot failed to rotate")
-
-    #robot moves to next waypoint and then checks for detected objects
 
     def display_waypoints(self):
         ''''This function is for displaying the waypoints in rviz for visualization, it is not used in the main loop but can be called for debugging or visualization purposes.
@@ -338,7 +296,7 @@ class MissionControler(Node):
         min_distance = float('inf')
 
         #getting the current position of the robot
-        # NEW: Check if current_pose is available from robot_commander
+        #Check if current_pose is available from subscriber callback
         try:
             curr_x = self.current_pose.pose.pose.position.x
             curr_y = self.current_pose.pose.pose.position.y
@@ -457,84 +415,6 @@ class MissionControler(Node):
     #TODO: implement ring interaction (e.g. say something about the ring, ask for help, etc.)
     def ring_interaction(self, cluster):
         return
-
-    def calculating_normal_vector(self, marker):
-        if len(marker.points) >= 2:
-            p0 = marker.points[0]
-            p1 = marker.points[1]
-            normal_vector = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z]
-
-            norm = np.linalg.norm(normal_vector)
-            if norm != 0:   
-                return [normal_vector[0]/norm, normal_vector[1]/norm, normal_vector[2]/norm]
-        else:
-            return [0,0,0]
-
-    def clustering(self, marker, type):
-        if type == "people":
-            #cluster people markers and update people_cluster
-            position = marker.pose.position
-            closeToCluster = False
-
-            #getting the normal vector for calculating the pose for robot postion to interact
-            normal_vector = self.calculating_normal_vector(marker)
-
-            #searching for close cluster for updating
-            for cluster in self.people_cluster:
-                if math.sqrt((position.x - cluster.center_position[1])**2 + (position.y - cluster.center_position[0])**2) < self.cluster_distance_thr:
-                    cluster.update(marker, normal_vector)
-                    closeToCluster = True
-                    self.get_logger().info(f"Updated cluster {cluster.id} for people with new marker, count of markers in cluster is now {cluster.count}")
-                    if cluster.count >= self.cluster_thr_people and cluster.status == "NOT_INTERACTED":
-                        if cluster not in self.detected_objects:
-                            self.detected_objects.append(cluster)
-                            cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
-                    break
-
-            #we create new cluster if marker is not close to any existing cluster and add it to detected objects for interaction
-            if not closeToCluster:
-                new_cluster = Cluster(type, [position.y, position.x, position.z], normal_vector)
-                self.people_cluster.append(new_cluster)
-            pass
-
-        elif type == "rings":
-            #cluster rings markers and update rings_cluster
-            position = marker.pose.position
-            closeToCluster = False
-
-            #getting the normal vector for calculating the pose for robot postion to interact
-            normal_vector = self.calculating_normal_vector(marker)
-
-            for cluster in self.rings_cluster:
-                if math.sqrt((position.x - cluster.center_position[1])**2 + (position.y - cluster.center_position[0])**2) < self.cluster_distance_thr:
-                    cluster.update(marker, normal_vector)
-                    closeToCluster = True
-                    if cluster.count >= self.cluster_thr_rings and cluster.status == "NOT_INTERACTED":
-                        if cluster not in self.detected_objects:
-                            self.detected_objects.append(cluster)
-                            cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
-                    break
-
-            if not closeToCluster:
-                new_cluster = Cluster(type, [position.y, position.x, position.z], normal_vector)
-                self.rings_cluster.append(new_cluster)
-            pass
-        return
-
-
-    # def people_marker_callback(self, msg):
-    #     marker = msg
-    #     self.get_logger().info(f"Received people marker")
-    #     #cluster people markers and update people_cluster
-    #     self.clustering(marker, "people")
-    #     return
-
-    # def rings_marker_callback(self, msg):
-    #     marker = msg
-    #     self.get_logger().info(f"Received ring marker")
-    #     #cluster rings markers and update rings_cluster
-    #     self.clustering(marker, "rings")
-    #     return
     
     def create_marker(self, point_stamped, marker_id, lifetime=30.0, color=(1.0, 0.0, 0.0, 1.0)):
         """You can see the description of the Marker message here: https://docs.ros2.org/galactic/api/visualization_msgs/msg/Marker.html"""
@@ -572,9 +452,11 @@ class MissionControler(Node):
         request = PeopleCluster.Request()
         people_clusters_future = self.get_people_clusters_service.call_async(request)
         
+        #waiting for the result of the service call without blocking the executor
         while rclpy.ok() and not people_clusters_future.done():
             rclpy.spin_once(self, timeout_sec=0.1)
-            
+        
+        #checking if the service call was successful and if we got the clusters of people
         if people_clusters_future.result() is not None:
             people_clusters = people_clusters_future.result().clusters.clusters
             self.get_logger().info(f"Obtained {len(people_clusters)} clusters of people for interaction")
@@ -589,9 +471,11 @@ class MissionControler(Node):
         request = RingCluster.Request()
         rings_clusters_future = self.get_rings_clusters_service.call_async(request)
         
+        #waiting for the result of the service call without blocking the executor
         while rclpy.ok() and not rings_clusters_future.done():
             rclpy.spin_once(self, timeout_sec=0.1)
 
+        #checking if the service call was successful and if we got the clusters of rings
         if rings_clusters_future.result() is not None:
             rings_clusters = rings_clusters_future.result().clusters.clusters
             self.get_logger().info(f"Obtained {len(rings_clusters)} clusters of rings for interaction")
