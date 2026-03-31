@@ -45,7 +45,7 @@ The main loop will be in the states_loop function which will call the appropriat
 
 '''
 class MissionControler(Node):
-    def __init__(self):
+    def __init__(self, waypoints = None):
         super().__init__('mission_controler')
         self.get_logger().info("Mission controler node initialized")
         self.get_logger().info("testing brach")
@@ -58,20 +58,7 @@ class MissionControler(Node):
 
         #TODO: we will fix this so the node will jiust read some file or smth not imported
         #waypoints for navigation
-        self.waypoints = [
-            {
-                'position': {'x': 0.9992520366512115, 'y': 5.099285747708961, 'z': 0.0},
-                'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.06709634580279415, 'w': 0.9977465010612224},
-            },
-            {
-                'position': {'x': -0.9625339498989449, 'y': 3.266840370555999, 'z': 0.0},
-                'orientation': {'x': 0.0, 'y': 0.0, 'z': -0.9895548398428475, 'w': 0.14415692471607602},
-            },
-            {
-                'position': {'x': -3.7034241420503897, 'y': 3.838940628120296, 'z': 0.0},
-                'orientation': {'x': 0.0, 'y': 0.0, 'z': -0.9973686480486497, 'w': 0.07249675778687495},
-            },
-        ]
+        self.waypoints = waypoints
 
         self.current_waypoint_index = 0
 
@@ -139,8 +126,8 @@ class MissionControler(Node):
 
         self.get_logger().info("Mission controler node setup complete, starting main loop")
 
-        
     
+
     #checking if the robot is not active (moving or rotating) before doing any action in the main loop
     def robot_status_callback(self, msg):
         self.get_logger().info(f"Received robot status: {msg.data}")
@@ -491,10 +478,75 @@ class MissionControler(Node):
             self.get_logger().error('Failed to call get_rings_clusters service')
         return
 
+def load_waypoints(default_waypoints):
+        # Try multiple locations so the node works from both package and workspace runs.
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        candidate_paths = [
+            os.getenv("ROBOT_POSES_FILE"),
+            os.path.join(os.getcwd(), "robot_poses.json"),
+            os.path.abspath(os.path.join(script_dir, "..", "robot_poses.json")),
+            os.path.abspath(os.path.join(script_dir, "..", "..", "..", "robot_poses.json")),
+        ]
+
+        json_path = next((path for path in candidate_paths if path and os.path.isfile(path)), None)
+        if json_path is None:
+            return default_waypoints
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as poses_file:
+                poses_data = json.load(poses_file)
+        except (OSError, json.JSONDecodeError) as error:
+            return default_waypoints
+
+        waypoints = []
+        for index, pose in enumerate(poses_data):
+            try:
+                position = pose["position"]
+                orientation = pose["orientation"]
+                waypoints.append(
+                    {
+                        "position": {
+                            "x": float(position["x"]),
+                            "y": float(position["y"]),
+                            "z": float(position.get("z", 0.0)),
+                        },
+                        "orientation": {
+                            "x": float(orientation.get("x", 0.0)),
+                            "y": float(orientation.get("y", 0.0)),
+                            "z": float(orientation["z"]),
+                            "w": float(orientation["w"]),
+                        },
+                    }
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                pass
+
+
+        if not waypoints:
+            return default_waypoints
+        
+        return waypoints
+
     
 def main():
+    default_waypoints = [
+            {
+                'position': {'x': 0.9992520366512115, 'y': 5.099285747708961, 'z': 0.0},
+                'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.06709634580279415, 'w': 0.9977465010612224},
+            },
+            {
+                'position': {'x': -0.9625339498989449, 'y': 3.266840370555999, 'z': 0.0},
+                'orientation': {'x': 0.0, 'y': 0.0, 'z': -0.9895548398428475, 'w': 0.14415692471607602},
+            },
+            {
+                'position': {'x': -3.7034241420503897, 'y': 3.838940628120296, 'z': 0.0},
+                'orientation': {'x': 0.0, 'y': 0.0, 'z': -0.9973686480486497, 'w': 0.07249675778687495},
+            },
+        ]
+    waypoints = load_waypoints(default_waypoints)
+
     rclpy.init(args=None)
-    node = MissionControler()
+    node = MissionControler(waypoints=waypoints)
 
     try:
         while rclpy.ok():
