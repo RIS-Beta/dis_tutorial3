@@ -359,8 +359,7 @@ class MissionControler(Node):
                 #functionallity for interaction with the object
                 self.get_logger().info(f"Interacting with object {self.target_object.type} with id {self.target_object.id}")
                 
-                if (self.target_object.type == "people"):
-                    self.people_interaction()
+                self.people_interaction()
 
                 # elif (self.target_object.type == "rings"):
                 #     self.ring_interaction(self.target_object)

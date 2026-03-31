@@ -22,21 +22,21 @@ from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.qos import qos_profile_sensor_data, QoSReliabilityPolicy
 from dis_tutorial3.msg import ClusterMsg, ClusterArray
 from dis_tutorial3.srv import PeopleCluster
-from cluster import Cluster
 
 class Cluster:
 
     #global id counter for clusters
     id_counter = 0
 
-    def __init__(self, type, position, normal):
+    def __init__(self, type, position, normal, count=1, status = "NOT_INTERACTED", avg_color=None):
         self.id = self.id_counter
         Cluster.id_counter += 1
         self.type = type # "people" or "ring"
         self.center_position = position # [y,x,z] 
-        self.status = "NOT_INTERACTED" # "NOT_INTERACTED", "READY", "INTERACTED"
+        self.status = status # "NOT_INTERACTED", "READY", "INTERACTED"
         self.normal = normal # normal vector for calcluating the pose for robot postion to interact
-        self.count = 1 #how many markers are in the cluster for better clustering
+        self.count = count #how many markers are in the cluster for better clustering
+        self.avg_color = avg_color #average color of the cluster for rings
 
     def update(self, new_marker, new_normal):
         #getting new center
