@@ -37,7 +37,6 @@ class detect_faces(Node):
 				('device', ''),
 		])
 
-		marker_topic = "/people_marker"
 		new_marker_topic = "/new_people_marker"
 
 		self.detection_color = (0,0,255)
@@ -52,7 +51,6 @@ class detect_faces(Node):
 		self.rgb_image_sub = self.create_subscription(Image, "/oakd/rgb/preview/image_raw", self.rgb_callback, qos_profile_sensor_data)
 		self.pointcloud_sub = self.create_subscription(PointCloud2, "/oakd/rgb/preview/depth/points", self.pointcloud_callback, qos_profile_sensor_data)
 
-		self.marker_pub = self.create_publisher(Marker, marker_topic, QoSReliabilityPolicy.BEST_EFFORT)
 		self.marker_new_pub = self.create_publisher(Marker, new_marker_topic, QoSReliabilityPolicy.BEST_EFFORT)
 
 		self.model = YOLO("yolov8n.pt")
@@ -60,8 +58,6 @@ class detect_faces(Node):
 		self.faces = []
 		self.markers = []
 		self.cluster_centers = []
-
-		self.get_logger().info(f"Node has been initialized! Will publish face markers to {marker_topic}.")
 
 	def rgb_callback(self, data):
 
@@ -127,32 +123,6 @@ class detect_faces(Node):
 			if any(math.isnan(float(v)) for v in d):
 				continue
 
-			# create marker
-			marker = Marker()
-
-			marker.header.frame_id = "/base_link"
-			marker.header.stamp = data.header.stamp
-
-			marker.type = 2
-			marker.id = 0
-
-			# Set the scale of the marker
-			scale = 0.1
-			marker.scale.x = scale
-			marker.scale.y = scale
-			marker.scale.z = scale
-
-			# Set the color
-			marker.color.r = 1.0
-			marker.color.g = 1.0
-			marker.color.b = 1.0
-			marker.color.a = 1.0
-
-			# Set the pose of the marker
-			marker.pose.position.x = float(d[0])
-			marker.pose.position.y = float(d[1])
-			marker.pose.position.z = float(d[2])
-
 			#transformation of marker
 			point_in_robot_frame = PointStamped()
 			point_in_robot_frame.header.frame_id = "/base_link"
@@ -207,22 +177,7 @@ class detect_faces(Node):
 			except TransformException as te:
 				self.get_logger().info(f"Cound not get the transform: {te}")
 
-			# self.markers.append(marker_in_map_frame)
-			self.marker_pub.publish(marker)
 
-	# def merge_clusters(self):
-	# 	centers = []
-	# 	for p in self.markers:
-	# 		p = p.pose.position
-	# 		merged = False
-	# 		for i, c in enumerate(centers):
-	# 			if np.linalg.norm(np.array(p) - np.array(c)) <= 0.8:
-	# 				centers[i] = ((np.array(c) + np.array(p)) / 2.0).tolist()
-	# 				merged = True
-	# 				break
-	# 		if not merged:
-	# 			centers.append(p)
-	# 	self.cluster_centers = centers
 
 	def _normalize_vector(self, vec):
 		norm = np.linalg.norm(vec)
