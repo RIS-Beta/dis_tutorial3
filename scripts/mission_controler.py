@@ -107,6 +107,9 @@ class MissionControler(Node):
         self.people_interaction_count = 0
         self.rings_interaction_count = 0
 
+        self.people_interaction_limit = 3
+        self.rings_interaction_limit = 2
+
         #distances to objects
         self.distance_to_people = 0.6
         self.distance_to_rings = 1.5
@@ -210,7 +213,7 @@ class MissionControler(Node):
         #TODO: fixe so 360 roation beacoems mroe optimal (just fix this brute force)
         #navigate to waypoints
         if not self.robot_active:
-            if self.current_waypoint_index < len(self.waypoints):
+            if self.current_waypoint_index < len(self.waypoints) and (self.people_interaction_count < self.people_interaction_limit or self.rings_interaction_count < self.rings_interaction_limit): #stop exploring if we interacted with enough people and rings or we finished all waypoints
                 waypoint = self.waypoints[self.current_waypoint_index]
                 pose = PoseStamped()
                 pose.header.frame_id = "map"  # Set the frame ID
@@ -346,9 +349,11 @@ class MissionControler(Node):
                 self.get_logger().info(f"Interacting with object {self.target_object.type} with id {self.target_object.id}")
                 
                 if self.target_object.type == "people":
+                    self.people_interaction_count += 1
                     self.people_interaction()
 
                 elif (self.target_object.type == "rings"):
+                    self.rings_interaction_count += 1
                     self.ring_interaction(self.target_object)
 
                 return

@@ -86,3 +86,13 @@ ros2 launch dis_tutorial3 mission.launch.py
 ```
 
 Note: You have to manually set the 2D pose estimate, you have 10 seconds to do that.
+
+
+# Zagon na drugi mapi:
+Shrani mapo:
+
+```bash
+ros2 run nav2_map_server map_saver_cli -f ~/path/to/your/map
+
+ros2 launch dis_tutorial3 sim_turtlebot_nav.launch.py
+```
