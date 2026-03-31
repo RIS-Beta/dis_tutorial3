@@ -359,10 +359,11 @@ class MissionControler(Node):
                 #functionallity for interaction with the object
                 self.get_logger().info(f"Interacting with object {self.target_object.type} with id {self.target_object.id}")
                 
-                self.people_interaction()
+                if self.target_object.type == "people":
+                    self.people_interaction()
 
-                # elif (self.target_object.type == "rings"):
-                #     self.ring_interaction(self.target_object)
+                elif (self.target_object.type == "rings"):
+                    self.ring_interaction(self.target_object)
 
                 return
             #Check if speech_future was actually created before waiting
@@ -388,10 +389,28 @@ class MissionControler(Node):
         self.speech_future = self.voice_commander_client.call_async(request)
         return
 
+    def _get_color_name(self, rgb_color):
+        # Simple color classification based on average RGB values
+        colors = {
+            (1.0, 0.0, 0.0): "Red",
+            (0.0, 1.0, 0.0): "Green",
+            (0.0, 0.0, 1.0): "Blue",
+            #(1.0, 1.0, 0.0): "Yellow",
+            #(1.0, 1.0, 1.0): "White",
+            (0.0, 0.0, 0.0): "Black",
+        }
+
+        #which colour is the closest to the average color of the ring
+        closest_color = min(colors.keys(), key=lambda c: np.linalg.norm(np.array(c) - np.array(rgb_color)))
+
+        return colors[closest_color]
+
+
     #TODO: implement ring interaction (e.g. say something about the ring, ask for help, etc.)
     def ring_interaction(self, cluster):
         request = Speech.Request()
-        request.text = cluster.color
+
+        request.text = self._get_color_name(cluster.avg_color)
 
         self.get_logger().info(request.text)
         self.speech_future = self.voice_commander_client.call_async(request)
@@ -461,7 +480,15 @@ class MissionControler(Node):
             rings_clusters = rings_clusters_future.result().clusters.clusters
             self.get_logger().info(f"Obtained {len(rings_clusters)} clusters of rings for interaction")
             for cluster in rings_clusters:
-                self.detected_objects.append(Cluster("rings", [cluster.center_position.y, cluster.center_position.x, cluster.center_position.z], [cluster.normal.x, cluster.normal.y, cluster.normal.z], count=cluster.count, status="READY"))
+                self.detected_objects.append(
+                    Cluster("rings", 
+                            [cluster.center_position.y, cluster.center_position.x, cluster.center_position.z], 
+                            [cluster.normal.x, cluster.normal.y, cluster.normal.z], 
+                            count=cluster.count, 
+                            status="READY", 
+                            avg_color=[cluster.color.x, cluster.color.y, cluster.color.z]
+                            )
+                        )
         else:
             self.get_logger().error('Failed to call get_rings_clusters service')
         return

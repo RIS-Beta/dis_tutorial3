@@ -69,7 +69,7 @@ class cluster_rings(Node):
 
         for cluster in self.rings_cluster:
             if math.sqrt((position.x - cluster.center_position[1])**2 + (position.y - cluster.center_position[0])**2) < self.cluster_distance_thr:
-                cluster.update(marker, normal_vector)
+                cluster.update(marker, normal_vector, color=[marker.color.r, marker.color.g, marker.color.b])
                 closeToCluster = True
                 if cluster.count >= self.cluster_thr_rings and cluster.status == "NOT_INTERACTED":
                     cluster.status = "READY" #ready means its hnot yet been interacted with but its ready for interaction because it has enough markers in cluster
@@ -79,7 +79,7 @@ class cluster_rings(Node):
                 break
 
         if not closeToCluster:
-            new_cluster = Cluster(type, [position.y, position.x, position.z], normal_vector)
+            new_cluster = Cluster(type, [position.y, position.x, position.z], normal_vector, avg_color=[marker.color.r, marker.color.g, marker.color.b])
             self.rings_cluster.append(new_cluster)
         return
 
@@ -161,6 +161,10 @@ class cluster_rings(Node):
                 cluster_msg.normal.x = cluster.normal[0]
                 cluster_msg.normal.y = cluster.normal[1]
                 cluster_msg.normal.z = cluster.normal[2]
+                if cluster.avg_color is not None:
+                    cluster_msg.color.x = cluster.avg_color[0]
+                    cluster_msg.color.y = cluster.avg_color[1]
+                    cluster_msg.color.z = cluster.avg_color[2]
                 response.clusters.clusters.append(cluster_msg)
                 cluster.status = "INTERACTED" #after sending cluster for interaction we set its status to interacted
                 self.get_logger().info(f"Cluster {cluster.id} of type {cluster.type} with center position {cluster.center_position} and normal {cluster.normal} is added to response")
