@@ -1,3 +1,29 @@
+#!/usr/bin/env python3
+
+import json
+import math
+import os
+import random
+import time
+import numpy as np
+import threading
+from copy import deepcopy
+
+from dis_tutorial3.srv import Speech
+import rclpy
+from geometry_msgs.msg import PointStamped, Pose, PoseArray, PoseStamped, Point
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
+from std_srvs.srv import Trigger
+from visualization_msgs.msg import Marker, MarkerArray
+from rclpy.duration import Duration
+from robot_commander import RobotCommander, TaskResult
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
+from rclpy.qos import qos_profile_sensor_data, QoSReliabilityPolicy
+from dis_tutorial3.msg import ClusterMsg, ClusterArray
+from dis_tutorial3.srv import PeopleCluster
+from cluster import Cluster
+
 class Cluster:
 
     #global id counter for clusters
