@@ -180,7 +180,6 @@ class cluster_people(Node):
 
         return marker
 
-<<<<<<< HEAD
     def get_clusters_callback(self, request, response):
         cluster_array_msg = ClusterArray()
         for cluster in self.people_cluster:
@@ -202,7 +201,7 @@ class cluster_people(Node):
         response.clusters = cluster_array_msg
         self.get_logger().info(f"Responding to get_people_clusters service with {len(cluster_array_msg.clusters)} clusters")
         return response
-=======
+        
     def create_normal_arrow_marker(self, point_stamped, marker_id, normal_vector, arrow_length=0.8, lifetime=0.0, color=(0.0, 0.0, 1.0, 1.0)):
         marker = Marker()
         marker.header = point_stamped.header
@@ -235,7 +234,6 @@ class cluster_people(Node):
         marker.lifetime = Duration(seconds=lifetime).to_msg()
         return marker
 
->>>>>>> 92737113e7af3d5eec460209d7e322dc73d5d4c0
 
 def main():
 	print('Cluster creator node started')
