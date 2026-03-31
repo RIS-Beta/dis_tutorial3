@@ -23,6 +23,7 @@ from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, qos_pro
 from dis_tutorial3.msg import ClusterMsg, ClusterArray
 from dis_tutorial3.srv import RingCluster, PeopleCluster
 from std_msgs.msg import Float64, String
+from cluster import Cluster
 
 #copied from robot_commander for consistency in qos profile for amcl pose
 amcl_pose_qos = QoSProfile(
@@ -34,35 +35,6 @@ amcl_pose_qos = QoSProfile(
 '''
 Cluster is a class that will be used to cluster people and rings for better interaction.
 '''
-class Cluster:
-
-    #global id counter for clusters
-    id_counter = 0
-
-    def __init__(self, type, position, normal, count=1, status="NOT_INTERACTED"):
-        self.id = self.id_counter
-        Cluster.id_counter += 1
-        self.type = type # "people" or "ring"
-        self.center_position = position # [y,x,z] 
-        self.status = status # "NOT_INTERACTED", "READY", "INTERACTED"
-        self.normal = normal # normal vector for calcluating the pose for robot postion to interact
-        self.count = count #how many markers are in the cluster for better clustering
-
-    def update(self, new_marker, new_normal):
-        #getting new center
-        self.center_position = [(self.center_position[0]*self.count + new_marker.pose.position.y)/(self.count+1),
-                                (self.center_position[1]*self.count + new_marker.pose.position.x)/(self.count+1),
-                                (self.center_position[2]*self.count + new_marker.pose.position.z)/(self.count+1)]
-        
-        #normal vector for calculating the pose for robot postion to interact
-        sum_normal = [self.normal[0]*self.count + new_normal[0],
-                       self.normal[1]*self.count + new_normal[1],
-                       self.normal[2]*self.count + new_normal[2]]
-        norm = np.linalg.norm(sum_normal)
-        if norm != 0:
-            self.normal = [sum_normal[0]/norm, sum_normal[1]/norm, sum_normal[2]/norm]
-        
-        self.count += 1
 
 '''
 
@@ -386,8 +358,13 @@ class MissionControler(Node):
             if self.speech_future is None:
                 #functionallity for interaction with the object
                 self.get_logger().info(f"Interacting with object {self.target_object.type} with id {self.target_object.id}")
-                self.people_interaction()
-                #TODO: add ring interaction
+                
+                if (self.target_object.type == "people"):
+                    self.people_interaction()
+
+                # elif (self.target_object.type == "rings"):
+                #     self.ring_interaction(self.target_object)
+
                 return
             #Check if speech_future was actually created before waiting
             if self.speech_future.done():
@@ -414,6 +391,11 @@ class MissionControler(Node):
 
     #TODO: implement ring interaction (e.g. say something about the ring, ask for help, etc.)
     def ring_interaction(self, cluster):
+        request = Speech.Request()
+        request.text = cluster.color
+
+        self.get_logger().info(request.text)
+        self.speech_future = self.voice_commander_client.call_async(request)
         return
     
     def create_marker(self, point_stamped, marker_id, lifetime=30.0, color=(1.0, 0.0, 0.0, 1.0)):
