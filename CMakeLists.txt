@@ -49,6 +49,7 @@ install(PROGRAMS
   scripts/mission_controler.py
   scripts/cluster_people.py
   scripts/cluster_rings.py
+  scripts/cluster.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
