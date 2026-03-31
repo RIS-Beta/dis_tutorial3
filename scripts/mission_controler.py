@@ -333,7 +333,6 @@ class MissionControler(Node):
             pose.header.frame_id = "map"  # Set the frame ID
             pose.header.stamp = self.get_clock().now().to_msg()  # Set the timestamp
 
-            #TODO: perhaps we change this based on the type of object
             distance_to_object = self.distance_to_people if self.target_object.type == "people" else self.distance_to_rings
 
             pose.pose.position.x = self.target_object.center_position[1] + self.target_object.normal[0]*distance_to_object
@@ -406,7 +405,6 @@ class MissionControler(Node):
         return colors[closest_color]
 
 
-    #TODO: implement ring interaction (e.g. say something about the ring, ask for help, etc.)
     def ring_interaction(self, cluster):
         request = Speech.Request()
 

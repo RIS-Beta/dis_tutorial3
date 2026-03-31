@@ -50,6 +50,7 @@ install(PROGRAMS
   scripts/cluster_people.py
   scripts/cluster_rings.py
   scripts/cluster.py
+  scripts/save_robot_pose.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
