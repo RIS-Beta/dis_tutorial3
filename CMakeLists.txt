@@ -17,11 +17,19 @@ find_package(rclpy REQUIRED)
 
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Speech.srv"
+  "srv/RingCluster.srv"
+  "srv/PeopleCluster.srv"
+  "msg/ClusterMsg.msg"
+  "msg/ClusterArray.msg"
+  DEPENDENCIES geometry_msgs std_srvs visualization_msgs
 )
+
 
 install(DIRECTORY
   launch
@@ -39,6 +47,10 @@ install(PROGRAMS
   scripts/detect_rings.py
   scripts/voice_commander.py
   scripts/mission_controler.py
+  scripts/cluster_people.py
+  scripts/cluster_rings.py
+  scripts/cluster.py
+  scripts/save_robot_pose.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
